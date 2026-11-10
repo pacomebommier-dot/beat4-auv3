@@ -1,0 +1,48 @@
+name: BEAT4 native iOS build (independent of XONE)
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'Beat4AU/**'
+      - 'Beat4App/**'
+      - 'Beat4.xcodeproj/**'
+      - 'Tests/**'
+jobs:
+  core-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: C++ portable tests
+        run: bash Tests/run.sh
+      - name: C++ sanitizers (ASan / UBSan)
+        env:
+          BEAT4_SANITIZE: '1'
+        run: bash Tests/run.sh
+  ios-source-build:
+    runs-on: macos-15
+    needs: core-tests
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show build environment
+        run: xcodebuild -version
+      - name: Compile unsigned BEAT4 container and extension
+        run: |
+          xcodebuild -project Beat4.xcodeproj \
+            -scheme Beat4App \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/Beat4DerivedData" \
+            CODE_SIGNING_ALLOWED=NO build
+      - name: Package UNSIGNED (not directly installable) IPA
+        run: |
+          mkdir -p "$RUNNER_TEMP/Payload"
+          cp -a "$RUNNER_TEMP/Beat4DerivedData/Build/Products/Release-iphoneos/BEAT4.app" "$RUNNER_TEMP/Payload/"
+          cd "$RUNNER_TEMP"
+          zip -qry "$GITHUB_WORKSPACE/BEAT4_UNSIGNED.ipa" Payload
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BEAT4-UNSIGNED-IPA
+          path: BEAT4_UNSIGNED.ipa
+          if-no-files-found: error
