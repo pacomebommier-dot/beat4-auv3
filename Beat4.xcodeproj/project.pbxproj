@@ -1,0 +1,613 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		8850563105E7E5F1988923F5 /* buildfw_app_UIKit */ = {
+			isa = PBXBuildFile;
+			fileRef = 702B7BF744D2571129EE66AD;
+		};
+		B1994E3720BA5554BF9D263E /* buildfw_ext_UIKit */ = {
+			isa = PBXBuildFile;
+			fileRef = 702B7BF744D2571129EE66AD;
+		};
+		21A4B1195AD705DAA02E289A /* buildfw_app_AudioToolbox */ = {
+			isa = PBXBuildFile;
+			fileRef = 4CEED71C67D2691979119EF3;
+		};
+		88381CF95BCE6B37463BDB49 /* buildfw_ext_AudioToolbox */ = {
+			isa = PBXBuildFile;
+			fileRef = 4CEED71C67D2691979119EF3;
+		};
+		6B99BF0791CF89DE85B5BEA0 /* buildfw_app_CoreAudioKit */ = {
+			isa = PBXBuildFile;
+			fileRef = 1378A624233252A95198C305;
+		};
+		50E180EFCCFC1C650A128A52 /* buildfw_ext_CoreAudioKit */ = {
+			isa = PBXBuildFile;
+			fileRef = 1378A624233252A95198C305;
+		};
+		FBC3B1A4CD341746A9370817 /* buildfw_app_AVFoundation */ = {
+			isa = PBXBuildFile;
+			fileRef = 130C612D72000D30152BD501;
+		};
+		3D2E22E85E5A28C970D45A24 /* buildfw_ext_AVFoundation */ = {
+			isa = PBXBuildFile;
+			fileRef = 130C612D72000D30152BD501;
+		};
+		FEBFC883DCC861A7EC924FCD /* buildfw_app_Foundation */ = {
+			isa = PBXBuildFile;
+			fileRef = 56129F68F0993903B0ED47A2;
+		};
+		70561E9CC97BA296ECB4C5DE /* buildfw_ext_Foundation */ = {
+			isa = PBXBuildFile;
+			fileRef = 56129F68F0993903B0ED47A2;
+		};
+		D983134710D562918826032F /* build_app_main.m */ = {
+			isa = PBXBuildFile;
+			fileRef = 76754C2347B416E023E4922D;
+		};
+		1E03F30BA02903454776E049 /* build_app_AppDelegate.m */ = {
+			isa = PBXBuildFile;
+			fileRef = 18CE6C0887C9B48CA685747A;
+		};
+		4309DE531BD3EC1B3DC5E053 /* build_ext_Beat4AudioUnit.mm */ = {
+			isa = PBXBuildFile;
+			fileRef = 3F1C149BEA6058C873759BA7;
+		};
+		D007AD1794B3BD761CCA9A43 /* build_ext_Beat4ViewController.mm */ = {
+			isa = PBXBuildFile;
+			fileRef = 8A06869375C5D5EB079B3A11;
+		};
+		77F644A33DBA3A22AA4262C3 /* embed_ext */ = {
+			isa = PBXBuildFile;
+			fileRef = 1695D5426A8C6CF38F5F4E2B;
+			settings = {
+				ATTRIBUTES = (
+				CodeSignOnCopy,
+				RemoveHeadersOnCopy,
+			);
+			};
+		};
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		9BD5C0E5D417D2E25E6AA0C9 /* proxy_ext */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 2B8956152907731EE17D7B5C;
+			proxyType = 1;
+			remoteGlobalIDString = ED806865CF5D638CBFF72D9F;
+			remoteInfo = Beat4AU;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		8D6D4DD7BBBD9B643E2A3368 /* phase_embed */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				77F644A33DBA3A22AA4262C3,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		76754C2347B416E023E4922D /* file_app_main.m */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.c.objc;
+			path = main.m;
+			sourceTree = "<group>";
+		};
+		18CE6C0887C9B48CA685747A /* file_app_AppDelegate.m */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.c.objc;
+			path = AppDelegate.m;
+			sourceTree = "<group>";
+		};
+		CAF047894DDEBFC72E15F488 /* file_app_AppDelegate.h */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.c.h;
+			path = AppDelegate.h;
+			sourceTree = "<group>";
+		};
+		3F1C149BEA6058C873759BA7 /* file_ext_Beat4AudioUnit.mm */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.objcpp;
+			path = Beat4AudioUnit.mm;
+			sourceTree = "<group>";
+		};
+		8A06869375C5D5EB079B3A11 /* file_ext_Beat4ViewController.mm */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.objcpp;
+			path = Beat4ViewController.mm;
+			sourceTree = "<group>";
+		};
+		6EE9BFCCFF026372B04CF3A8 /* file_ext_Beat4AudioUnit.h */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.c.h;
+			path = Beat4AudioUnit.h;
+			sourceTree = "<group>";
+		};
+		7F76CEF78C47A8DBEC46F839 /* file_ext_Beat4ViewController.h */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.c.h;
+			path = Beat4ViewController.h;
+			sourceTree = "<group>";
+		};
+		961CE429B4EE6F36F1A1F2D8 /* file_ext_Beat4Math.hpp */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = Beat4Math.hpp;
+			sourceTree = "<group>";
+		};
+		B4B400000000000000000004 /* file_ext_Beat4BeatGate.hpp */ = {
+            isa = PBXFileReference;
+            lastKnownFileType = sourcecode.cpp.h;
+            path = Beat4BeatGate.hpp;
+            sourceTree = "<group>";
+        };
+        B4B400000000000000000005 /* file_ext_Beat4Layout.hpp */ = {
+            isa = PBXFileReference;
+            lastKnownFileType = sourcecode.cpp.h;
+            path = Beat4Layout.hpp;
+            sourceTree = "<group>";
+        };
+		B4B400000000000000000001 /* file_ext_Beat4Transport.hpp */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.h;
+			path = Beat4Transport.hpp;
+			sourceTree = "<group>";
+		};
+		522036BEFE125B7C2CCE09EA /* plist_app */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.plist.xml;
+			path = Info.plist;
+			sourceTree = "<group>";
+		};
+		D816B7768C2B38CCF59FFBAC /* plist_ext */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.plist.xml;
+			path = Info.plist;
+			sourceTree = "<group>";
+		};
+		3A441AC208E95D270813D373 /* file_README.md */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = net.daringfireball.markdown;
+			path = README.md;
+			sourceTree = "<group>";
+		};
+		CCBB8D9781DDDA3901B216D8 /* file_test.cpp */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = sourcecode.cpp.cpp;
+			path = test_beat4.cpp;
+			sourceTree = "<group>";
+		};
+		45D51FF739E9E7152D7CE328 /* file_run.sh */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = text.script.sh;
+			path = run.sh;
+			sourceTree = "<group>";
+		};
+		CBC04A4C1B478D0008EFC71B /* product_app */ = {
+			isa = PBXFileReference;
+			explicitFileType = wrapper.application;
+			includeInIndex = 0;
+			path = BEAT4.app;
+			sourceTree = BUILT_PRODUCTS_DIR;
+		};
+		1695D5426A8C6CF38F5F4E2B /* product_ext */ = {
+			isa = PBXFileReference;
+			explicitFileType = "wrapper.app-extension";
+			includeInIndex = 0;
+			path = Beat4AU.appex;
+			sourceTree = BUILT_PRODUCTS_DIR;
+		};
+		702B7BF744D2571129EE66AD /* fw_UIKit */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = wrapper.framework;
+			name = UIKit.framework;
+			path = System/Library/Frameworks/UIKit.framework;
+			sourceTree = SDKROOT;
+		};
+		4CEED71C67D2691979119EF3 /* fw_AudioToolbox */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = wrapper.framework;
+			name = AudioToolbox.framework;
+			path = System/Library/Frameworks/AudioToolbox.framework;
+			sourceTree = SDKROOT;
+		};
+		1378A624233252A95198C305 /* fw_CoreAudioKit */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = wrapper.framework;
+			name = CoreAudioKit.framework;
+			path = System/Library/Frameworks/CoreAudioKit.framework;
+			sourceTree = SDKROOT;
+		};
+		130C612D72000D30152BD501 /* fw_AVFoundation */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = wrapper.framework;
+			name = AVFoundation.framework;
+			path = System/Library/Frameworks/AVFoundation.framework;
+			sourceTree = SDKROOT;
+		};
+		56129F68F0993903B0ED47A2 /* fw_Foundation */ = {
+			isa = PBXFileReference;
+			lastKnownFileType = wrapper.framework;
+			name = Foundation.framework;
+			path = System/Library/Frameworks/Foundation.framework;
+			sourceTree = SDKROOT;
+		};
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		5DCEBE0E3DA96126583AA007 /* phase_app_frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8850563105E7E5F1988923F5,
+				FEBFC883DCC861A7EC924FCD,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		63EE46277AE87AB5241C8FE9 /* phase_ext_frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B1994E3720BA5554BF9D263E,
+				88381CF95BCE6B37463BDB49,
+				50E180EFCCFC1C650A128A52,
+				3D2E22E85E5A28C970D45A24,
+				70561E9CC97BA296ECB4C5DE,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		2A6E587C3D9361E941DAE918 /* group_main */ = {
+			isa = PBXGroup;
+			children = (
+				03EF5F83940F99F90C8894A0,
+				EB1E7D89A079D64C1608E63A,
+				1BCCF40C0BB5C9ABDEDFD19A,
+				3A441AC208E95D270813D373,
+				591D719A6B6F733A4960A898,
+				F02E938DFB16C9FA34C828FE,
+			);
+			sourceTree = "<group>";
+		};
+		03EF5F83940F99F90C8894A0 /* group_app */ = {
+			isa = PBXGroup;
+			children = (
+				76754C2347B416E023E4922D,
+				18CE6C0887C9B48CA685747A,
+				CAF047894DDEBFC72E15F488,
+				522036BEFE125B7C2CCE09EA,
+			);
+			path = Beat4App;
+			sourceTree = "<group>";
+		};
+		EB1E7D89A079D64C1608E63A /* group_ext */ = {
+			isa = PBXGroup;
+			children = (
+				3F1C149BEA6058C873759BA7,
+				8A06869375C5D5EB079B3A11,
+				6EE9BFCCFF026372B04CF3A8,
+				7F76CEF78C47A8DBEC46F839,
+				961CE429B4EE6F36F1A1F2D8,
+				B4B400000000000000000001,
+				B4B400000000000000000004,
+				B4B400000000000000000005,
+				D816B7768C2B38CCF59FFBAC,
+			);
+			path = Beat4AU;
+			sourceTree = "<group>";
+		};
+		1BCCF40C0BB5C9ABDEDFD19A /* group_tests */ = {
+			isa = PBXGroup;
+			children = (
+				CCBB8D9781DDDA3901B216D8,
+				45D51FF739E9E7152D7CE328,
+			);
+			path = Tests;
+			sourceTree = "<group>";
+		};
+		591D719A6B6F733A4960A898 /* group_fw */ = {
+			isa = PBXGroup;
+			children = (
+				702B7BF744D2571129EE66AD,
+				4CEED71C67D2691979119EF3,
+				1378A624233252A95198C305,
+				130C612D72000D30152BD501,
+				56129F68F0993903B0ED47A2,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		F02E938DFB16C9FA34C828FE /* group_products */ = {
+			isa = PBXGroup;
+			children = (
+				CBC04A4C1B478D0008EFC71B,
+				1695D5426A8C6CF38F5F4E2B,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		D9315DBA96D37E33D5DBC80A /* target_app */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 2CEA1A5A88AC5B0A28C24C33;
+			buildPhases = (
+				8F851C646253221FBCACB562,
+				5DCEBE0E3DA96126583AA007,
+				A6EF7FCA15439E21E4F4AE4B,
+				8D6D4DD7BBBD9B643E2A3368,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				840C1636911469E460301F72,
+			);
+			name = Beat4App;
+			productName = BEAT4;
+			productReference = CBC04A4C1B478D0008EFC71B;
+			productType = "com.apple.product-type.application";
+		};
+		ED806865CF5D638CBFF72D9F /* target_ext */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5BDAB3525B588A28B17E51FD;
+			buildPhases = (
+				5B8BFBED98095D0EA7CA05F9,
+				63EE46277AE87AB5241C8FE9,
+				059BC16D69E9F296BFE03A9F,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Beat4AU;
+			productName = Beat4AU;
+			productReference = 1695D5426A8C6CF38F5F4E2B;
+			productType = "com.apple.product-type.app-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		2B8956152907731EE17D7B5C /* project */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+				D9315DBA96D37E33D5DBC80A = {
+				CreatedOnToolsVersion = 16.0;
+				ProvisioningStyle = Automatic;
+			};
+				ED806865CF5D638CBFF72D9F = {
+				CreatedOnToolsVersion = 16.0;
+				ProvisioningStyle = Automatic;
+			};
+			};
+			};
+			buildConfigurationList = 033CBA23EDBB078BADCF8472;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 2A6E587C3D9361E941DAE918;
+			productRefGroup = F02E938DFB16C9FA34C828FE;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				D9315DBA96D37E33D5DBC80A,
+				ED806865CF5D638CBFF72D9F,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A6EF7FCA15439E21E4F4AE4B /* phase_app_resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		059BC16D69E9F296BFE03A9F /* phase_ext_resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		8F851C646253221FBCACB562 /* phase_app_sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D983134710D562918826032F,
+				1E03F30BA02903454776E049,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5B8BFBED98095D0EA7CA05F9 /* phase_ext_sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4309DE531BD3EC1B3DC5E053,
+				D007AD1794B3BD761CCA9A43,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		840C1636911469E460301F72 /* target_dep */ = {
+			isa = PBXTargetDependency;
+			target = ED806865CF5D638CBFF72D9F;
+			targetProxy = 9BD5C0E5D417D2E25E6AA0C9;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		0CC54893CB1631358E026377 /* config_project_Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+				"DEBUG=1",
+				"$(inherited)",
+			);
+			};
+			name = Debug;
+		};
+		1625435BC7ABBB3DBDA65A4D /* config_app_Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.beat4;
+				INFOPLIST_FILE = Beat4App/Info.plist;
+				PRODUCT_NAME = BEAT4;
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = NO;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				LD_RUNPATH_SEARCH_PATHS = (
+				"$(inherited)",
+				"@executable_path/Frameworks",
+			);
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		00D5710132E807729C701407 /* config_ext_Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.beat4.au;
+				INFOPLIST_FILE = Beat4AU/Info.plist;
+				PRODUCT_NAME = Beat4AU;
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = NO;
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				LD_RUNPATH_SEARCH_PATHS = (
+				"$(inherited)",
+				"@executable_path/Frameworks",
+				"@executable_path/../../Frameworks",
+			);
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		B81E5D27CAD25C97C7B1DEA9 /* config_project_Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_OPTIMIZATION_LEVEL = s;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				GCC_PREPROCESSOR_DEFINITIONS = (
+				"$(inherited)",
+			);
+			};
+			name = Release;
+		};
+		BCA9DF1DBB42CA7242416DF0 /* config_app_Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.beat4;
+				INFOPLIST_FILE = Beat4App/Info.plist;
+				PRODUCT_NAME = BEAT4;
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = NO;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				LD_RUNPATH_SEARCH_PATHS = (
+				"$(inherited)",
+				"@executable_path/Frameworks",
+			);
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		0AD522E6E4F864753D20AB0F /* config_ext_Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.beat4.au;
+				INFOPLIST_FILE = Beat4AU/Info.plist;
+				PRODUCT_NAME = Beat4AU;
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = NO;
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				LD_RUNPATH_SEARCH_PATHS = (
+				"$(inherited)",
+				"@executable_path/Frameworks",
+				"@executable_path/../../Frameworks",
+			);
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		033CBA23EDBB078BADCF8472 /* configlist_project */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0CC54893CB1631358E026377,
+				B81E5D27CAD25C97C7B1DEA9,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		2CEA1A5A88AC5B0A28C24C33 /* configlist_app */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1625435BC7ABBB3DBDA65A4D,
+				BCA9DF1DBB42CA7242416DF0,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		5BDAB3525B588A28B17E51FD /* configlist_ext */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				00D5710132E807729C701407,
+				0AD522E6E4F864753D20AB0F,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 2B8956152907731EE17D7B5C /* Project object */;
+}
