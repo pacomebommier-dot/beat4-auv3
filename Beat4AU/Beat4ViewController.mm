@@ -158,10 +158,10 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     NSMutableArray<UIMenuElement*> *actions=[NSMutableArray new];
     for(int i=0;i<12;++i){
         NSString *label=[NSString stringWithUTF8String:beat4::noteName(i)];
-        __weak typeof(self) weak=self;
+        __weak Beat4ViewController *weakSelf = self;
         [actions addObject:[UIAction actionWithTitle:label image:nil identifier:nil handler:^(__kindof UIAction* act){
             (void)act;
-            [weak.unit saveSongSubNote:i];[weak refreshSong];
+            [weakSelf.unit saveSongSubNote:i];[weakSelf refreshSong];
         }]];
     }
     _noteButton.menu=[UIMenu menuWithChildren:actions];
@@ -188,10 +188,10 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     NSString *name=[self.unit currentSong][@"title"];
     [a addTextFieldWithConfigurationHandler:^(UITextField* field){field.text=[name isEqualToString:@"UNKNOWN"]?@"":name;
         field.placeholder=@"UNKNOWN";field.autocorrectionType=UITextAutocorrectionTypeNo;}];
-    __weak typeof(self) weak=self;
+    __weak Beat4ViewController *weakSelf = self;
     [a addAction:[UIAlertAction actionWithTitle:@"Annuler" style:UIAlertActionStyleCancel handler:nil]];
     [a addAction:[UIAlertAction actionWithTitle:@"Enregistrer" style:UIAlertActionStyleDefault handler:^(UIAlertAction* action){
-        (void)action;[weak.unit saveSongTitle:a.textFields.firstObject.text ?: @""];[weak refreshSong];
+        (void)action;[weakSelf.unit saveSongTitle:a.textFields.firstObject.text ?: @""];[weakSelf refreshSong];
     }]];
     [self presentViewController:a animated:YES completion:nil];
 }
@@ -204,13 +204,13 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
         if(current>0)f.text=[NSString stringWithFormat:@"%.1f",current];
         f.placeholder=@"128.0";
     }];
-    __weak typeof(self) weak=self;
+    __weak Beat4ViewController *weakSelf = self;
     [a addAction:[UIAlertAction actionWithTitle:@"Annuler" style:UIAlertActionStyleCancel handler:nil]];
     [a addAction:[UIAlertAction actionWithTitle:@"Enregistrer" style:UIAlertActionStyleDefault handler:^(UIAlertAction* action){
         (void)action;
         NSString *value=[a.textFields.firstObject.text stringByReplacingOccurrencesOfString:@"," withString:@"."];
         double bpm=value.doubleValue;
-        if(beat4::validBPM(bpm)){[weak.unit saveSongBPM:bpm];[weak refreshSong];}
+        if(beat4::validBPM(bpm)){[weakSelf.unit saveSongBPM:bpm];[weakSelf refreshSong];}
     }]];
     [self presentViewController:a animated:YES completion:nil];
 }
