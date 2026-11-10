@@ -1,0 +1,71 @@
+name: Import BEAT4 V0.5 source ZIP and compile
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [BEAT4_AUv3_V0_5_Xcode.zip]
+permissions:
+  contents: write
+jobs:
+  import-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Expand independent BEAT4 project
+        run: |
+          test -f BEAT4_AUv3_V0_5_Xcode.zip
+          mkdir -p "$RUNNER_TEMP/beat4-import"
+          unzip -q BEAT4_AUv3_V0_5_Xcode.zip -d "$RUNNER_TEMP/beat4-import"
+          test -f "$RUNNER_TEMP/beat4-import/BEAT4_AUv3_V0_5/Beat4.xcodeproj/project.pbxproj"
+          rsync -a --exclude='.github/' "$RUNNER_TEMP/beat4-import/BEAT4_AUv3_V0_5/" ./
+      - name: Portable tests
+        run: bash Tests/run.sh
+      - name: C++ ASan and UBSan
+        env:
+          BEAT4_SANITIZE: '1'
+        run: bash Tests/run.sh
+      - name: Publish expanded source tree on BEAT4 main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Beat4.xcodeproj Beat4AU Beat4App Tests Tools docs audio-demo README.md .gitignore
+          if git diff --cached --quiet; then
+            echo "No new source changes."
+          else
+            git commit -m "Import BEAT4 V0.5 AUv3 source and tests"
+            git push origin HEAD:main
+          fi
+  ios-unsigned:
+    runs-on: macos-15
+    needs: import-and-test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Expand source ZIP for native compiler
+        run: |
+          if [ ! -d Beat4AU ]; then
+            mkdir -p "$RUNNER_TEMP/beat4-import"
+            unzip -q BEAT4_AUv3_V0_5_Xcode.zip -d "$RUNNER_TEMP/beat4-import"
+            rsync -a --exclude='.github/' "$RUNNER_TEMP/beat4-import/BEAT4_AUv3_V0_5/" ./
+          fi
+      - name: Print Xcode version
+        run: xcodebuild -version
+      - name: Build unsigned AUv3 app and extension
+        run: |
+          xcodebuild -project Beat4.xcodeproj \
+            -scheme Beat4App \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/Beat4DerivedData" \
+            CODE_SIGNING_ALLOWED=NO build
+      - name: Package unsigned test IPA
+        run: |
+          mkdir -p "$RUNNER_TEMP/Payload"
+          cp -a "$RUNNER_TEMP/Beat4DerivedData/Build/Products/Release-iphoneos/BEAT4.app" "$RUNNER_TEMP/Payload/"
+          cd "$RUNNER_TEMP"
+          zip -qry "$GITHUB_WORKSPACE/BEAT4_UNSIGNED.ipa" Payload
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BEAT4-UNSIGNED-IPA
+          path: BEAT4_UNSIGNED.ipa
+          if-no-files-found: error
