@@ -1,55 +1,50 @@
-name: Import BEAT4 V0.5 source ZIP and compile
+name: Bootstrap BEAT4 V0.5 sources and build iOS
 on:
-  workflow_dispatch:
   push:
     branches: [main]
-    paths: [BEAT4_AUv3_V0_5_Xcode.zip]
+    paths: [BEAT4_SOURCE_V05.b64]
+  workflow_dispatch:
 permissions:
   contents: write
 jobs:
-  import-and-test:
+  expand-and-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Expand independent BEAT4 project
+        with:
+          persist-credentials: true
+      - name: Expand compact transport into normal source files
         run: |
-          test -f BEAT4_AUv3_V0_5_Xcode.zip
-          mkdir -p "$RUNNER_TEMP/beat4-import"
-          unzip -q BEAT4_AUv3_V0_5_Xcode.zip -d "$RUNNER_TEMP/beat4-import"
-          test -f "$RUNNER_TEMP/beat4-import/BEAT4_AUv3_V0_5/Beat4.xcodeproj/project.pbxproj"
-          rsync -a --exclude='.github/' "$RUNNER_TEMP/beat4-import/BEAT4_AUv3_V0_5/" ./
+          set -euo pipefail
+          test -s BEAT4_SOURCE_V05.b64
+          mkdir -p "$RUNNER_TEMP/beat4"
+          base64 -d BEAT4_SOURCE_V05.b64 | tar -xJf - -C "$RUNNER_TEMP/beat4"
+          test -f "$RUNNER_TEMP/beat4/BEAT4_AUv3_V0_5/Beat4.xcodeproj/project.pbxproj"
+          rsync -a --exclude='.github/' "$RUNNER_TEMP/beat4/BEAT4_AUv3_V0_5/" ./
       - name: Portable tests
         run: bash Tests/run.sh
-      - name: C++ ASan and UBSan
+      - name: ASan and UBSan
         env:
           BEAT4_SANITIZE: '1'
         run: bash Tests/run.sh
-      - name: Publish expanded source tree on BEAT4 main
+      - name: Commit unpacked sources (no binary transport left)
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Beat4.xcodeproj Beat4AU Beat4App Tests Tools docs audio-demo README.md .gitignore
-          if git diff --cached --quiet; then
-            echo "No new source changes."
-          else
-            git commit -m "Import BEAT4 V0.5 AUv3 source and tests"
-            git push origin HEAD:main
-          fi
-  ios-unsigned:
+          git add Beat4.xcodeproj Beat4AU Beat4App Tests Tools docs README.md .gitignore
+          git rm -f BEAT4_SOURCE_V05.b64
+          git commit -m "Publish BEAT4 V0.5 AUv3 sources and portable tests"
+          git push origin HEAD:main
+  build-ios:
     runs-on: macos-15
-    needs: import-and-test
+    needs: expand-and-test
     steps:
       - uses: actions/checkout@v4
-      - name: Expand source ZIP for native compiler
-        run: |
-          if [ ! -d Beat4AU ]; then
-            mkdir -p "$RUNNER_TEMP/beat4-import"
-            unzip -q BEAT4_AUv3_V0_5_Xcode.zip -d "$RUNNER_TEMP/beat4-import"
-            rsync -a --exclude='.github/' "$RUNNER_TEMP/beat4-import/BEAT4_AUv3_V0_5/" ./
-          fi
-      - name: Print Xcode version
+        with:
+          ref: main
+      - name: Xcode
         run: xcodebuild -version
-      - name: Build unsigned AUv3 app and extension
+      - name: Build unsigned BEAT4 app and extension
         run: |
           xcodebuild -project Beat4.xcodeproj \
             -scheme Beat4App \
@@ -58,12 +53,11 @@ jobs:
             -destination 'generic/platform=iOS' \
             -derivedDataPath "$RUNNER_TEMP/Beat4DerivedData" \
             CODE_SIGNING_ALLOWED=NO build
-      - name: Package unsigned test IPA
+      - name: Package unsigned IPA
         run: |
           mkdir -p "$RUNNER_TEMP/Payload"
           cp -a "$RUNNER_TEMP/Beat4DerivedData/Build/Products/Release-iphoneos/BEAT4.app" "$RUNNER_TEMP/Payload/"
-          cd "$RUNNER_TEMP"
-          zip -qry "$GITHUB_WORKSPACE/BEAT4_UNSIGNED.ipa" Payload
+          (cd "$RUNNER_TEMP" && zip -qry "$GITHUB_WORKSPACE/BEAT4_UNSIGNED.ipa" Payload)
       - uses: actions/upload-artifact@v4
         with:
           name: BEAT4-UNSIGNED-IPA
