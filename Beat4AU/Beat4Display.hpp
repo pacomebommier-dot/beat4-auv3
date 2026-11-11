@@ -33,6 +33,8 @@ inline double beatRise(double fraction) noexcept {
 }
 
 inline double barBrightness(int cell,int active,double fraction) noexcept {
+    // At a beat boundary the former active cell becomes the previous cell at
+    // full energy, while the new active cell starts from zero: no visible cut.
     if(cell<0 || cell>3 || active<0 || active>3 ||
        !(fraction>=0.0 && fraction<=1.0))return 0.0;
     if(cell==active)return beatRise(fraction);
