@@ -9,6 +9,24 @@ HostReading frame(bool moving, double beat, double samples, bool changed = false
     return {true, true, moving, changed, beat, samples};
 }
 int main() {
+    // Callback availability, return status, and payload validity are separate gates.
+    assert(!beat4::validTransportReading(false, false, 0));
+    assert(!beat4::validTransportReading(true, false, 0));
+    assert(!beat4::validTransportReading(true, true, std::nan("")));
+    assert(beat4::validTransportReading(true, true, 0));
+    assert(!beat4::validMusicalReading(false, false, 120, 4, 4, 0));
+    assert(!beat4::validMusicalReading(true, false, 120, 4, 4, 0));
+    assert(!beat4::validMusicalReading(true, true, 0, 4, 4, 0));
+    assert(!beat4::validMusicalReading(true, true, std::nan(""), 4, 4, 0));
+    assert(!beat4::validMusicalReading(true, true, 120, 3, 4, 0));
+    assert(!beat4::validMusicalReading(true, true, 120, 4, 3, 0));
+    assert(!beat4::validMusicalReading(true, true, 120, 4, 4, std::nan("")));
+    assert(beat4::validMusicalReading(true, true, 120, 4, 4, 1.5));
+    assert(beat4::validMMCCommand(0x01));
+    assert(beat4::validMMCCommand(0x02));
+    assert(beat4::validMMCCommand(0x09));
+    assert(!beat4::validMMCCommand(0x03));
+
     HostMemory h;
     // Initial unloaded/idle host is READY, not a proven STOP.
     assert(h.observe(frame(false, 0, 0)) == HostMode::ReadyAtZero);
@@ -49,6 +67,15 @@ int main() {
     missing.musicalValid = false;
     assert(preRoll.observe(missing) == HostMode::Unknown);
     assert(preRoll.observe(frame(false, 0, 0)) == HostMode::ReadyAtZero);
+
+    // A callback that appears after an unavailable interval can immediately
+    // provide a usable reading; no permanently cached UNKNOWN state remains.
+    HostMemory lateCallback;
+    HostReading noHost = frame(false, 0, 0);
+    noHost.transportValid = false;
+    noHost.musicalValid = false;
+    assert(lateCallback.observe(noHost) == HostMode::Unknown);
+    assert(lateCallback.observe(frame(true, 1.25, 30000)) == HostMode::Play);
 
     HostReading nan = frame(false, 0, 0);
     nan.samplePosition = std::nan("");

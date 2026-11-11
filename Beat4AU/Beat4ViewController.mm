@@ -67,7 +67,7 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
 @property(nonatomic,strong)Beat4AudioUnit *unit;
 @property(nonatomic,strong)Beat4Canvas *canvas;
 @property(nonatomic,strong)CADisplayLink *clock;
-@property(nonatomic,strong)UILabel *logo,*host,*pgLabel,*subLabel,*levelLabel;
+@property(nonatomic,strong)UILabel *logo,*host,*diagnostics,*pgLabel,*subLabel,*levelLabel;
 @property(nonatomic,strong)UIButton *kickButton,*noteButton,*songButton,*bpmButton;
 @property(nonatomic,strong)UIButton *playButton,*pauseButton,*stopButton;
 @property(nonatomic,strong)UISlider *levelSlider;
@@ -98,6 +98,8 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     _logo=[self makeLabel:@"BEAT//4" size:20 color:RGB(220,224,212)];
     _logo.font=Mono(20,UIFontWeightSemibold);
     _host=[self makeLabel:@"AUM  •  WAIT" size:11 color:RGB(144,161,140)];_host.textAlignment=NSTextAlignmentRight;
+    _diagnostics=[self makeLabel:@"RENDER WAIT | TRANSPORT WAIT | MUSICAL WAIT | MMC WAIT" size:8 color:RGB(117,133,114)];
+    _diagnostics.adjustsFontSizeToFitWidth=YES;_diagnostics.minimumScaleFactor=.55;
     _pgLabel=[self makeLabel:@"PG  ---" size:11 color:RGB(132,150,131)];
     _subLabel=[self makeLabel:@"SUB" size:10 color:RGB(123,136,122)];
     _levelLabel=[self makeLabel:@"LEVEL" size:10 color:RGB(123,136,122)];
@@ -132,6 +134,7 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     auto frame=[](beat4::Rect r) {return CGRectMake(r.x,r.y,r.w,r.h);};
     _logo.frame=frame(l.logo);
     _host.frame=frame(l.host);
+    _diagnostics.frame=frame(l.diagnostics);
     _host.hidden=l.transportsInHeader && self.view.bounds.size.width<380;
     _pgLabel.frame=frame(l.pg);
     _pgLabel.hidden=NO;
@@ -153,6 +156,7 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     _songButton.titleLabel.font=Mono(narrow?16:20,UIFontWeightMedium);
     _logo.font=Mono(narrow?17:20,UIFontWeightSemibold);
     _pgLabel.font=Mono(l.transportsInHeader?9:11);
+    _diagnostics.font=Mono(l.transportsInHeader?7:8);
 }
 - (void)configureNoteMenu {
     NSMutableArray<UIMenuElement*> *actions=[NSMutableArray new];
@@ -239,7 +243,23 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     if(pg!=self.seenPG){self.seenPG=pg;[self refreshSong];}
     BOOL synced=[data[@"synced"] boolValue];
     BOOL moving=[data[@"moving"] boolValue];
-    _host.text=synced?[NSString stringWithFormat:@"AUM %.1f %@",[data[@"bpm"] doubleValue],moving?@"▶":@"Ⅱ"] : (![data[@"hasRender"] boolValue]?@"AUM NO AUDIO":@"AUM NO HOST");
+    _host.text=synced?[NSString stringWithFormat:@"AUM %.1f %@",[data[@"bpm"] doubleValue],moving?@"▶":@"Ⅱ"] : (![data[@"hasRender"] boolValue]?@"AUM NO RENDER":@"AUM NO HOST");
+    NSString *render=[data[@"hasRender"] boolValue]
+        ? [NSString stringWithFormat:@"R %llu / %.0fms",[data[@"renderCallbacks"] unsignedLongLongValue],[data[@"renderAge"] doubleValue]*1000.0]
+        : [NSString stringWithFormat:@"R %llu / STALE",[data[@"renderCallbacks"] unsignedLongLongValue]];
+    NSString *transport=[NSString stringWithFormat:@"T %d/%d",[data[@"transportCallback"] boolValue],[data[@"transportReturned"] boolValue]];
+    NSString *musical=[NSString stringWithFormat:@"M %d/%d",[data[@"musicalCallback"] boolValue],[data[@"musicalReturned"] boolValue]];
+    NSString *mmcCommand=@"---";
+    switch([data[@"mmcLastAttempt"] intValue]){
+        case 0x01:mmcCommand=@"STOP";break; case 0x02:mmcCommand=@"PLAY";break;
+        case 0x09:mmcCommand=@"PAUSE";break; case 0x05:mmcCommand=@"PUNCH";break;
+    }
+    const int pending=[data[@"mmcPending"] intValue];
+    NSString *pendingText=pending?[NSString stringWithFormat:@"%02X",pending]:@"--";
+    _diagnostics.text=[NSString stringWithFormat:@"%@ | %@ | %@ | MOV %d BPM %.1f BEAT %.2f | MMC OUT %d REQ %llu P %@ TRY %llu %@",
+        render,transport,musical,moving,[data[@"bpm"] doubleValue],[data[@"beat"] doubleValue],
+        [data[@"midiOut"] boolValue],[data[@"mmcRequested"] unsignedLongLongValue],pendingText,
+        [data[@"mmcAttempts"] unsignedLongLongValue],mmcCommand];
     BOOL enabled=[data[@"kickEnabled"] boolValue];
     [_kickButton setTitleColor:enabled?RGB(177,225,164):RGB(110,120,111) forState:UIControlStateNormal];
     if(!_levelSlider.tracking)_levelSlider.value=[data[@"kickLevel"] floatValue];

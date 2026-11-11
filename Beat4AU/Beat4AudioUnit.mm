@@ -29,12 +29,15 @@ struct State {
     std::array<std::atomic<double>,128> tempos;
     std::atomic<float> kickLevel{0.60f};
     std::atomic<bool> kickEnabled{false}; // OFF at first boot: no surprising audio.
-    std::atomic<int> pendingTempoPG{-1}, pendingMMC{0};
+    std::atomic<int> pendingTempoPG{-1}, pendingMMC{0}, mmcLastAttempt{0};
+    std::atomic<uint64_t> mmcRequested{0}, mmcAttempts{0};
     std::atomic<bool> midiOutputConfigured{false};
+    std::atomic<bool> transportCallbackPresent{false}, musicalCallbackPresent{false};
+    std::atomic<bool> transportReturned{false}, musicalReturned{false};
     State() {for(int i=0;i<128;++i){notes[i].store(-1);tempos[i].store(0);}}
 };
-// Stable, realtime-readable callback slots. Host callbacks are installed during
-// allocateRenderResources, which can occur after internalRenderBlock is queried.
+// Stable, realtime-readable callback slots. The UI thread refreshes these as the
+// host installs callbacks; retained blocks keep published pointers valid.
 struct HostHooks {
     std::atomic<void *> transport{nullptr};
     std::atomic<void *> musical{nullptr};
@@ -45,6 +48,10 @@ struct Snapshot {
     double beat, bpm, samplePosition, bufferSeconds;
     int numerator, denominator, mode;
     bool transportValid, musicalValid, moving, transportChanged;
+    bool transportCallbackPresent, musicalCallbackPresent, transportReturned, musicalReturned;
+    uint64_t mmcRequested, mmcAttempts;
+    int pendingMMC, mmcLastAttempt;
+    bool midiOutputConfigured;
 };
 Snapshot load(const State& s) noexcept {
     Snapshot result{};
@@ -57,7 +64,14 @@ Snapshot load(const State& s) noexcept {
                 s.numerator.load(std::memory_order_relaxed), s.denominator.load(std::memory_order_relaxed),
                 s.mode.load(std::memory_order_relaxed), s.transportValid.load(std::memory_order_relaxed),
                 s.musicalValid.load(std::memory_order_relaxed), s.moving.load(std::memory_order_relaxed),
-                s.transportChanged.load(std::memory_order_relaxed)};
+                s.transportChanged.load(std::memory_order_relaxed),
+                s.transportCallbackPresent.load(std::memory_order_relaxed),
+                s.musicalCallbackPresent.load(std::memory_order_relaxed),
+                s.transportReturned.load(std::memory_order_relaxed),
+                s.musicalReturned.load(std::memory_order_relaxed),
+                s.mmcRequested.load(std::memory_order_relaxed), s.mmcAttempts.load(std::memory_order_relaxed),
+                s.pendingMMC.load(std::memory_order_relaxed), s.mmcLastAttempt.load(std::memory_order_relaxed),
+                s.midiOutputConfigured.load(std::memory_order_relaxed)};
         const auto b=s.sequence.load(std::memory_order_acquire);
         if(a==b && !(b&1)) break;
     }
@@ -79,6 +93,7 @@ Snapshot load(const State& s) noexcept {
     AUHostTransportStateBlock _cachedTransport;
     AUHostMusicalContextBlock _cachedMusical;
     AUMIDIOutputEventBlock _cachedMIDIOutput;
+    NSMutableArray * _hostCallbackKeepalive;
     NSMutableDictionary<NSString*,NSDictionary*> *_songCache; // UI thread only
 }
 @end
@@ -94,6 +109,7 @@ Snapshot load(const State& s) noexcept {
     _hostMemory=std::make_shared<beat4::HostMemory>();
     _kickVoice=std::make_shared<beat4::KickVoice>();
     _beatGate=std::make_shared<beat4::BeatGate>();
+    _hostCallbackKeepalive=[NSMutableArray new];
     AVAudioFormat* format=[[AVAudioFormat alloc] initStandardFormatWithSampleRate:48000 channels:2];
     _output=[[AUAudioUnitBus alloc]initWithFormat:format error:outError];
     if(!_output)return nil;
@@ -141,13 +157,6 @@ Snapshot load(const State& s) noexcept {
 - (NSInteger)virtualMIDICableCount {return 1;}
 - (BOOL)allocateRenderResourcesAndReturnError:(NSError * _Nullable __autoreleasing *)outError {
     if(![super allocateRenderResourcesAndReturnError:outError])return NO;
-    _cachedTransport=[self.transportStateBlock copy];
-    _cachedMusical=[self.musicalContextBlock copy];
-    _cachedMIDIOutput=[self.MIDIOutputEventBlock copy];
-    _hostHooks->transport.store((__bridge void *)_cachedTransport,std::memory_order_release);
-    _hostHooks->musical.store((__bridge void *)_cachedMusical,std::memory_order_release);
-    _hostHooks->midiOut.store((__bridge void *)_cachedMIDIOutput,std::memory_order_release);
-    _state->midiOutputConfigured.store(_cachedMIDIOutput != nil);
     return YES;
 }
 - (void)deallocateRenderResources {
@@ -155,8 +164,24 @@ Snapshot load(const State& s) noexcept {
     _hostHooks->musical.store(nullptr,std::memory_order_release);
     _hostHooks->midiOut.store(nullptr,std::memory_order_release);
     [super deallocateRenderResources];
-    _cachedTransport=nil; _cachedMusical=nil; _cachedMIDIOutput=nil;
     _state->midiOutputConfigured.store(false);
+}
+- (void)refreshHostCallbacksOnMainThread {
+    if(![NSThread isMainThread])return;
+    AUHostTransportStateBlock transport=[self.transportStateBlock copy];
+    AUHostMusicalContextBlock musical=[self.musicalContextBlock copy];
+    AUMIDIOutputEventBlock midi=[self.MIDIOutputEventBlock copy];
+    // Keep old callback blocks alive while a render callback may still be using one.
+    if(transport && transport!=_cachedTransport)[_hostCallbackKeepalive addObject:transport];
+    if(musical && musical!=_cachedMusical)[_hostCallbackKeepalive addObject:musical];
+    if(midi && midi!=_cachedMIDIOutput)[_hostCallbackKeepalive addObject:midi];
+    _cachedTransport=transport; _cachedMusical=musical; _cachedMIDIOutput=midi;
+    _hostHooks->transport.store((__bridge void *)transport,std::memory_order_release);
+    _hostHooks->musical.store((__bridge void *)musical,std::memory_order_release);
+    _hostHooks->midiOut.store((__bridge void *)midi,std::memory_order_release);
+    _state->transportCallbackPresent.store(transport!=nil,std::memory_order_relaxed);
+    _state->musicalCallbackPresent.store(musical!=nil,std::memory_order_relaxed);
+    _state->midiOutputConfigured.store(midi!=nil,std::memory_order_relaxed);
 }
 - (AUInternalRenderBlock)internalRenderBlock {
     const std::shared_ptr<State> shared=_state;
@@ -209,15 +234,20 @@ Snapshot load(const State& s) noexcept {
             const int cmd=s->pendingMMC.exchange(0,std::memory_order_acq_rel);
             if(cmd==0x01||cmd==0x02||cmd==0x05||cmd==0x09){
                 uint8_t message[6]={0xF0,0x7F,0x7F,0x06,static_cast<uint8_t>(cmd),0xF7};
+                s->mmcLastAttempt.store(cmd,std::memory_order_relaxed);
+                s->mmcAttempts.fetch_add(1,std::memory_order_relaxed);
                 midiOut(sampleTime,0,6,message);
             }
         }
         AUHostTransportStateFlags flags=(AUHostTransportStateFlags)0;
         double sample=0;
-        const bool transportOK=transport!=nil && transport(&flags,&sample,nullptr,nullptr);
+        const bool transportReturned=transport!=nil && transport(&flags,&sample,nullptr,nullptr);
         double tempo=0,beatsPerBar=4,beat=0;
         NSInteger denominator=4;
-        const bool musicalOK=musical!=nil && musical(&tempo,&beatsPerBar,&denominator,&beat,nullptr,nullptr);
+        const bool musicalReturned=musical!=nil && musical(&tempo,&beatsPerBar,&denominator,&beat,nullptr,nullptr);
+        const bool transportOK=beat4::validTransportReading(transport!=nil,transportReturned,sample);
+        const bool musicalOK=beat4::validMusicalReading(musical!=nil,musicalReturned,tempo,
+                                                         beatsPerBar,(int)denominator,beat);
         const bool moving=transportOK && (flags & AUHostTransportStateMoving);
         const bool changed=transportOK && (flags & AUHostTransportStateChanged);
         const auto mode=memory->observe({transportOK,musicalOK,moving,changed,beat,sample});
@@ -266,27 +296,35 @@ Snapshot load(const State& s) noexcept {
         s->transportChanged.store(changed,std::memory_order_relaxed);
         s->transportValid.store(transportOK,std::memory_order_relaxed);
         s->musicalValid.store(musicalOK,std::memory_order_relaxed);
+        s->transportReturned.store(transportReturned,std::memory_order_relaxed);
+        s->musicalReturned.store(musicalReturned,std::memory_order_relaxed);
         s->callbacks.fetch_add(1,std::memory_order_relaxed);
         s->sequence.fetch_add(1,std::memory_order_release);
         return noErr;
     };
 }
 - (NSDictionary<NSString*,NSNumber*>*)transportSnapshot {
+    [self refreshHostCallbacksOnMainThread];
     const Snapshot s=load(*_state);
     mach_timebase_info_data_t info{};mach_timebase_info(&info);
     const uint64_t now=mach_absolute_time();
     const double age=(s.tick>0 && now>=s.tick && info.denom!=0)
         ? (double)(now-s.tick)*info.numer/info.denom/1e9:1e6;
     const bool fresh=s.callbacks>0 && age<.25;
-    const bool synced=fresh && s.transportValid && s.musicalValid && std::isfinite(s.bpm) && s.bpm>0;
+    const bool synced=fresh && s.transportValid && s.musicalValid;
     const double projected=synced?beat4::displayBeat(s.beat,s.bpm,s.moving,age,s.bufferSeconds):s.beat;
     const auto d=beat4::project(projected,s.samplePosition,s.moving);
     return @{@"hasRender":@(fresh),@"synced":@(synced),@"moving":@(s.moving),
+             @"renderCallbacks":@(s.callbacks),@"renderAge":@(age),
+             @"transportCallback":@(s.transportCallbackPresent),@"transportReturned":@(s.transportReturned),
+             @"musicalCallback":@(s.musicalCallbackPresent),@"musicalReturned":@(s.musicalReturned),
              @"mode":@(s.mode),@"active":@(d.cell),@"fraction":@(d.fractional),
-             @"bpm":@(s.bpm),@"bar":@(d.bar),@"numerator":@(s.numerator),
+             @"bpm":@(s.bpm),@"beat":@(s.beat),@"bar":@(d.bar),@"numerator":@(s.numerator),
              @"denominator":@(s.denominator),@"pg":@(_state->currentPG.load()),
              @"kickEnabled":@(_state->kickEnabled.load()),@"kickLevel":@(_state->kickLevel.load()),
-             @"midiOut":@(_state->midiOutputConfigured.load())};
+             @"midiOut":@(s.midiOutputConfigured),@"mmcRequested":@(s.mmcRequested),
+             @"mmcPending":@(s.pendingMMC),@"mmcAttempts":@(s.mmcAttempts),
+             @"mmcLastAttempt":@(s.mmcLastAttempt)};
 }
 - (NSInteger)currentProgram {return _state->currentPG.load();}
 - (NSDictionary<NSString*,id>*)currentSong {
@@ -326,5 +364,9 @@ Snapshot load(const State& s) noexcept {
 }
 - (void)setKickLevel:(float)level {float clamped=std::fmax(0.f,std::fmin(1.f,level));_state->kickLevel.store(clamped);_levelParameter.value=clamped;}
 - (void)setKickEnabled:(BOOL)enabled {_state->kickEnabled.store(enabled);_enabledParameter.value=enabled?1:0;}
-- (void)requestMMC:(uint8_t)command { _state->pendingMMC.store(command); }
+- (void)requestMMC:(uint8_t)command {
+    if(!beat4::validMMCCommand(command))return;
+    _state->mmcRequested.fetch_add(1,std::memory_order_relaxed);
+    _state->pendingMMC.store(command,std::memory_order_release);
+}
 @end
