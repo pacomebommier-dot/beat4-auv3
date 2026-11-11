@@ -4,6 +4,10 @@
 #include <cmath>
 namespace beat4 {
 struct Rect {double x=0,y=0,w=0,h=0;};
+inline Rect hitRect(Rect visual,double minimum=44.0) noexcept {
+    const double w=std::max(minimum,visual.w), h=std::max(minimum,visual.h);
+    return {visual.x-(w-visual.w)*.5,visual.y-(h-visual.h)*.5,w,h};
+}
 struct Layout {
     Rect logo, host, diagnostics, pg, bars, kick, subLabel, subValue, levelLabel, levelSlider;
     Rect song, bpm, play, pause, stop;
@@ -21,8 +25,8 @@ inline Layout layoutFor(double W, double H) noexcept {
     l.diagnostics = {pad,headerY+31,W-2*pad,compact?10.0:14.0};
     l.transportsInHeader=compact;
     if(compact){
-        const double buttonWidth=std::clamp(W*.065,23.0,33.0);
-        const double dx=std::clamp(W*.032,8.0,16.0);
+        const double buttonWidth=36.0;
+        const double dx=8.0;
         const double x=W-pad-(buttonWidth*3+dx*2);
         l.play={x,headerY,buttonWidth,30};
         l.pause={x+buttonWidth+dx,headerY,buttonWidth,30};

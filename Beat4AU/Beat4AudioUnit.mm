@@ -9,6 +9,7 @@
 #import <array>
 #import "Beat4Math.hpp"
 #import "Beat4Transport.hpp"
+#import "Beat4MMC.hpp"
 #import "Beat4Songs.hpp"
 #import "Beat4Kick.hpp"
 #import "Beat4BeatGate.hpp"
@@ -20,7 +21,7 @@ constexpr double kTempoMin = 20;
 constexpr double kTempoMax = 240;
 static NSString *const kSongStoreKey = @"beat4.songs.v1";
 struct State {
-    std::atomic<uint64_t> sequence{0}, tick{0}, callbacks{0};
+    std::atomic<uint64_t> sequence{0}, tick{0}, callbacks{0}, displayRevision{1};
     std::atomic<double> beat{0}, bpm{0}, samplePosition{0}, bufferSeconds{0.005};
     std::atomic<int> numerator{4}, denominator{4}, mode{0};
     std::atomic<bool> transportValid{false}, musicalValid{false}, moving{false}, transportChanged{false};
@@ -29,7 +30,9 @@ struct State {
     std::array<std::atomic<double>,128> tempos;
     std::atomic<float> kickLevel{0.60f};
     std::atomic<bool> kickEnabled{false}; // OFF at first boot: no surprising audio.
-    std::atomic<int> pendingTempoPG{-1}, pendingMMC{0}, mmcLastAttempt{0};
+    std::atomic<int> pendingTempoPG{-1}, mmcLastAttempt{0}, mmcLastStatus{0};
+    std::atomic<uint64_t> mmcDelivery{0};
+    std::atomic<uint32_t> mmcNextGeneration{0};
     std::atomic<uint64_t> mmcRequested{0}, mmcAttempts{0};
     std::atomic<bool> midiOutputConfigured{false};
     std::atomic<bool> transportCallbackPresent{false}, musicalCallbackPresent{false};
@@ -50,7 +53,8 @@ struct Snapshot {
     bool transportValid, musicalValid, moving, transportChanged;
     bool transportCallbackPresent, musicalCallbackPresent, transportReturned, musicalReturned;
     uint64_t mmcRequested, mmcAttempts;
-    int pendingMMC, mmcLastAttempt;
+    uint64_t mmcDelivery;
+    int mmcLastAttempt, mmcLastStatus;
     bool midiOutputConfigured;
 };
 Snapshot load(const State& s) noexcept {
@@ -70,7 +74,8 @@ Snapshot load(const State& s) noexcept {
                 s.transportReturned.load(std::memory_order_relaxed),
                 s.musicalReturned.load(std::memory_order_relaxed),
                 s.mmcRequested.load(std::memory_order_relaxed), s.mmcAttempts.load(std::memory_order_relaxed),
-                s.pendingMMC.load(std::memory_order_relaxed), s.mmcLastAttempt.load(std::memory_order_relaxed),
+                s.mmcDelivery.load(std::memory_order_relaxed), s.mmcLastAttempt.load(std::memory_order_relaxed),
+                s.mmcLastStatus.load(std::memory_order_relaxed),
                 s.midiOutputConfigured.load(std::memory_order_relaxed)};
         const auto b=s.sequence.load(std::memory_order_acquire);
         if(a==b && !(b&1)) break;
@@ -157,6 +162,13 @@ Snapshot load(const State& s) noexcept {
 - (NSInteger)virtualMIDICableCount {return 1;}
 - (BOOL)allocateRenderResourcesAndReturnError:(NSError * _Nullable __autoreleasing *)outError {
     if(![super allocateRenderResourcesAndReturnError:outError])return NO;
+    _hostHooks->transport.store((__bridge void *)_cachedTransport,std::memory_order_release);
+    _hostHooks->musical.store((__bridge void *)_cachedMusical,std::memory_order_release);
+    _hostHooks->midiOut.store((__bridge void *)_cachedMIDIOutput,std::memory_order_release);
+    _state->transportCallbackPresent.store(_cachedTransport!=nil,std::memory_order_relaxed);
+    _state->musicalCallbackPresent.store(_cachedMusical!=nil,std::memory_order_relaxed);
+    _state->midiOutputConfigured.store(_cachedMIDIOutput!=nil,std::memory_order_relaxed);
+    _state->displayRevision.fetch_add(1,std::memory_order_release);
     return YES;
 }
 - (void)deallocateRenderResources {
@@ -164,24 +176,34 @@ Snapshot load(const State& s) noexcept {
     _hostHooks->musical.store(nullptr,std::memory_order_release);
     _hostHooks->midiOut.store(nullptr,std::memory_order_release);
     [super deallocateRenderResources];
-    _state->midiOutputConfigured.store(false);
+    _state->transportCallbackPresent.store(false,std::memory_order_relaxed);
+    _state->musicalCallbackPresent.store(false,std::memory_order_relaxed);
+    _state->midiOutputConfigured.store(false,std::memory_order_relaxed);
+    _state->displayRevision.fetch_add(1,std::memory_order_release);
 }
 - (void)refreshHostCallbacksOnMainThread {
     if(![NSThread isMainThread])return;
-    AUHostTransportStateBlock transport=[self.transportStateBlock copy];
-    AUHostMusicalContextBlock musical=[self.musicalContextBlock copy];
-    AUMIDIOutputEventBlock midi=[self.MIDIOutputEventBlock copy];
-    // Keep old callback blocks alive while a render callback may still be using one.
-    if(transport && transport!=_cachedTransport)[_hostCallbackKeepalive addObject:transport];
-    if(musical && musical!=_cachedMusical)[_hostCallbackKeepalive addObject:musical];
-    if(midi && midi!=_cachedMIDIOutput)[_hostCallbackKeepalive addObject:midi];
-    _cachedTransport=transport; _cachedMusical=musical; _cachedMIDIOutput=midi;
-    _hostHooks->transport.store((__bridge void *)transport,std::memory_order_release);
-    _hostHooks->musical.store((__bridge void *)musical,std::memory_order_release);
-    _hostHooks->midiOut.store((__bridge void *)midi,std::memory_order_release);
-    _state->transportCallbackPresent.store(transport!=nil,std::memory_order_relaxed);
-    _state->musicalCallbackPresent.store(musical!=nil,std::memory_order_relaxed);
-    _state->midiOutputConfigured.store(midi!=nil,std::memory_order_relaxed);
+    if(_cachedTransport && _cachedMusical && _cachedMIDIOutput)return;
+    bool changed=false;
+    if(!_cachedTransport){
+        AUHostTransportStateBlock block=[self.transportStateBlock copy];
+        if(block){_cachedTransport=block;[_hostCallbackKeepalive addObject:block];changed=true;}
+    }
+    if(!_cachedMusical){
+        AUHostMusicalContextBlock block=[self.musicalContextBlock copy];
+        if(block){_cachedMusical=block;[_hostCallbackKeepalive addObject:block];changed=true;}
+    }
+    if(!_cachedMIDIOutput){
+        AUMIDIOutputEventBlock block=[self.MIDIOutputEventBlock copy];
+        if(block){_cachedMIDIOutput=block;[_hostCallbackKeepalive addObject:block];changed=true;}
+    }
+    _hostHooks->transport.store((__bridge void *)_cachedTransport,std::memory_order_release);
+    _hostHooks->musical.store((__bridge void *)_cachedMusical,std::memory_order_release);
+    _hostHooks->midiOut.store((__bridge void *)_cachedMIDIOutput,std::memory_order_release);
+    _state->transportCallbackPresent.store(_cachedTransport!=nil,std::memory_order_relaxed);
+    _state->musicalCallbackPresent.store(_cachedMusical!=nil,std::memory_order_relaxed);
+    _state->midiOutputConfigured.store(_cachedMIDIOutput!=nil,std::memory_order_relaxed);
+    if(changed)_state->displayRevision.fetch_add(1,std::memory_order_release);
 }
 - (AUInternalRenderBlock)internalRenderBlock {
     const std::shared_ptr<State> shared=_state;
@@ -206,16 +228,20 @@ Snapshot load(const State& s) noexcept {
             if(e->head.eventType==AURenderEventParameter || e->head.eventType==AURenderEventParameterRamp){
                 // AUM may schedule automation/MIDI Learn as realtime parameter events,
                 // bypassing the UI-side AUParameter value observer.
-                if(e->parameter.parameterAddress==kLevel)
-                    s->kickLevel.store(std::fmax(0.f,std::fmin(1.f,e->parameter.value)));
-                else if(e->parameter.parameterAddress==kEnabled)
-                    s->kickEnabled.store(e->parameter.value>=.5f);
+                if(e->parameter.parameterAddress==kLevel){
+                    const float value=std::fmax(0.f,std::fmin(1.f,e->parameter.value));
+                    if(s->kickLevel.exchange(value)!=value)s->displayRevision.fetch_add(1,std::memory_order_relaxed);
+                }else if(e->parameter.parameterAddress==kEnabled){
+                    const bool value=e->parameter.value>=.5f;
+                    if(s->kickEnabled.exchange(value)!=value)s->displayRevision.fetch_add(1,std::memory_order_relaxed);
+                }
                 continue;
             }
             if(e->head.eventType!=AURenderEventMIDI || e->MIDI.length<2)continue;
             int pg=-1;
             if(beat4::isCircuitProgramChange(e->MIDI.data[0],e->MIDI.data[1],pg)){
-                s->currentPG.store(pg,std::memory_order_release);
+                if(s->currentPG.exchange(pg,std::memory_order_acq_rel)!=pg)
+                    s->displayRevision.fetch_add(1,std::memory_order_relaxed);
                 s->pendingTempoPG.store(pg,std::memory_order_release);
             }
         }
@@ -231,13 +257,6 @@ Snapshot load(const State& s) noexcept {
                     midiOut(sampleTime,0,3,bytes);
                 }
             }
-            const int cmd=s->pendingMMC.exchange(0,std::memory_order_acq_rel);
-            if(cmd==0x01||cmd==0x02||cmd==0x05||cmd==0x09){
-                uint8_t message[6]={0xF0,0x7F,0x7F,0x06,static_cast<uint8_t>(cmd),0xF7};
-                s->mmcLastAttempt.store(cmd,std::memory_order_relaxed);
-                s->mmcAttempts.fetch_add(1,std::memory_order_relaxed);
-                midiOut(sampleTime,0,6,message);
-            }
         }
         AUHostTransportStateFlags flags=(AUHostTransportStateFlags)0;
         double sample=0;
@@ -250,7 +269,65 @@ Snapshot load(const State& s) noexcept {
                                                          beatsPerBar,(int)denominator,beat);
         const bool moving=transportOK && (flags & AUHostTransportStateMoving);
         const bool changed=transportOK && (flags & AUHostTransportStateChanged);
+        const bool atOrigin=transportOK && musicalOK && std::abs(beat)<.005 && std::abs(sample)<1024.0;
+        uint64_t mmcWord=s->mmcDelivery.load(std::memory_order_acquire);
+        const int mmcCommand=beat4::mmcDeliveryCommand(mmcWord);
+        if(beat4::validMMCCommand(mmcCommand)){
+            const bool goalReached=beat4::mmcGoalReached(mmcCommand,moving,atOrigin);
+            if(goalReached){
+                const auto done=beat4::mmcPackDelivery(beat4::mmcDeliveryGeneration(mmcWord),0,
+                    beat4::mmcDeliveryAttempts(mmcWord),0,false);
+                if(s->mmcDelivery.compare_exchange_strong(mmcWord,done,std::memory_order_acq_rel)){
+                    s->displayRevision.fetch_add(1,std::memory_order_relaxed);
+                }
+            }else{
+                int cooldown=beat4::mmcDeliveryCooldown(mmcWord);
+                if(cooldown>0){
+                    cooldown=beat4::mmcCooldownAfterFrames(cooldown,frameCount);
+                    const auto waiting=beat4::mmcPackDelivery(beat4::mmcDeliveryGeneration(mmcWord),
+                        mmcCommand,beat4::mmcDeliveryAttempts(mmcWord),cooldown,false);
+                    if(!s->mmcDelivery.compare_exchange_strong(mmcWord,waiting,std::memory_order_acq_rel))
+                        goto mmc_done;
+                    mmcWord=waiting;
+                }
+                const int attempts=beat4::mmcDeliveryAttempts(mmcWord);
+                if(beat4::mmcShouldAttempt(mmcCommand,false,midiOut!=nil,attempts,cooldown)){
+                    // A tap may replace the request between buffers. Verify the
+                    // generation immediately before emitting, then publish the
+                    // retry state only if that exact request is still current.
+                    if(s->mmcDelivery.load(std::memory_order_acquire)!=mmcWord)goto mmc_done;
+                    uint8_t message[6]={0xF0,0x7F,0x7F,0x06,static_cast<uint8_t>(mmcCommand),0xF7};
+                    const AUAudioUnitStatus status=midiOut(sampleTime,0,6,message);
+                    const int retryFrames=status==noErr?beat4::mmcRetryFrameGap(sampleRate):0;
+                    const auto attempted=beat4::mmcPackDelivery(beat4::mmcDeliveryGeneration(mmcWord),
+                        mmcCommand,attempts+1,retryFrames,false);
+                    if(s->mmcDelivery.compare_exchange_strong(mmcWord,attempted,std::memory_order_acq_rel)){
+                        s->mmcLastAttempt.store(mmcCommand,std::memory_order_relaxed);
+                        s->mmcLastStatus.store((int)status,std::memory_order_relaxed);
+                        s->mmcAttempts.fetch_add(1,std::memory_order_relaxed);
+                        s->displayRevision.fetch_add(1,std::memory_order_relaxed);
+                    }
+                }else if(attempts>=beat4::kMMCAttemptLimit && cooldown<=0){
+                    const auto failed=beat4::mmcPackDelivery(beat4::mmcDeliveryGeneration(mmcWord),
+                        0,attempts,0,true);
+                    if(s->mmcDelivery.compare_exchange_strong(mmcWord,failed,std::memory_order_acq_rel)){
+                        s->displayRevision.fetch_add(1,std::memory_order_relaxed);
+                    }
+                }
+            }
+        }
+mmc_done:
         const auto mode=memory->observe({transportOK,musicalOK,moving,changed,beat,sample});
+        const bool firstRender=s->callbacks.load(std::memory_order_relaxed)==0;
+        const bool visibleChanged=firstRender || s->moving.load(std::memory_order_relaxed)!=moving ||
+            s->transportValid.load(std::memory_order_relaxed)!=transportOK ||
+            s->musicalValid.load(std::memory_order_relaxed)!=musicalOK ||
+            s->transportReturned.load(std::memory_order_relaxed)!=transportReturned ||
+            s->musicalReturned.load(std::memory_order_relaxed)!=musicalReturned ||
+            s->mode.load(std::memory_order_relaxed)!=(int)mode ||
+            s->numerator.load(std::memory_order_relaxed)!=(int)beatsPerBar ||
+            s->denominator.load(std::memory_order_relaxed)!=(int)denominator ||
+            std::abs(s->bpm.load(std::memory_order_relaxed)-tempo)>.001;
         const bool canPlay=moving && musicalOK && sampleRate>0 && std::isfinite(beat) &&
                 std::isfinite(tempo) && tempo>0 && beatsPerBar==4 && denominator==4;
         const bool on=s->kickEnabled.load(std::memory_order_relaxed);
@@ -258,13 +335,24 @@ Snapshot load(const State& s) noexcept {
         int pg=s->currentPG.load(std::memory_order_relaxed);
         int pitch=beat4::validProgram(pg)?s->notes[pg].load(std::memory_order_relaxed):-1;
         const double subHz=beat4::subFrequency(pitch);
-        if(!canPlay || !on)voice->reset();
         // The gate preserves the last triggered quarter-note across render buffers.
         // Visuals and sound use the same host musical position, with no free-running clock.
-        gate->prepare(beat,tempo,sampleRate,frameCount,canPlay);
-        for(AVAudioFrameCount i=0;i<frameCount;++i){
+        gate->prepare(beat,tempo,sampleRate,frameCount,canPlay&&on);
+        if(!canPlay || !on){
+            voice->reset();
+            if(actionFlags)*actionFlags|=kAudioUnitRenderAction_OutputIsSilence;
+            if(outputData){
+                for(UInt32 b=0;b<outputData->mNumberBuffers;++b){
+                    AudioBuffer &buf=outputData->mBuffers[b];
+                    if(buf.mData){
+                        const std::size_t bytes=beat4::audioBytesForFrames(frameCount,buf.mNumberChannels,buf.mDataByteSize);
+                        std::memset(buf.mData,0,bytes);
+                    }
+                }
+            }
+        }else for(AVAudioFrameCount i=0;i<frameCount;++i){
             double v=0;
-            if(canPlay && on){
+            {
                 if(gate->atSample(i))voice->trigger();
                 v=voice->process(sampleRate,subHz)*level*0.70;
             }
@@ -299,12 +387,14 @@ Snapshot load(const State& s) noexcept {
         s->transportReturned.store(transportReturned,std::memory_order_relaxed);
         s->musicalReturned.store(musicalReturned,std::memory_order_relaxed);
         s->callbacks.fetch_add(1,std::memory_order_relaxed);
+        if(visibleChanged)s->displayRevision.fetch_add(1,std::memory_order_relaxed);
         s->sequence.fetch_add(1,std::memory_order_release);
         return noErr;
     };
 }
 - (NSDictionary<NSString*,NSNumber*>*)transportSnapshot {
-    [self refreshHostCallbacksOnMainThread];
+    if(!_cachedTransport || !_cachedMusical || !_cachedMIDIOutput)
+        [self refreshHostCallbacksOnMainThread];
     const Snapshot s=load(*_state);
     mach_timebase_info_data_t info{};mach_timebase_info(&info);
     const uint64_t now=mach_absolute_time();
@@ -323,9 +413,11 @@ Snapshot load(const State& s) noexcept {
              @"denominator":@(s.denominator),@"pg":@(_state->currentPG.load()),
              @"kickEnabled":@(_state->kickEnabled.load()),@"kickLevel":@(_state->kickLevel.load()),
              @"midiOut":@(s.midiOutputConfigured),@"mmcRequested":@(s.mmcRequested),
-             @"mmcPending":@(s.pendingMMC),@"mmcAttempts":@(s.mmcAttempts),
-             @"mmcLastAttempt":@(s.mmcLastAttempt)};
+             @"mmcPending":@(beat4::mmcDeliveryCommand(s.mmcDelivery)),@"mmcAttempts":@(s.mmcAttempts),
+             @"mmcLastAttempt":@(s.mmcLastAttempt),@"mmcLastStatus":@(s.mmcLastStatus),
+             @"mmcFailed":@(beat4::mmcDeliveryFailed(s.mmcDelivery))};
 }
+- (uint64_t)displayRevision {return _state->displayRevision.load(std::memory_order_acquire);}
 - (NSInteger)currentProgram {return _state->currentPG.load();}
 - (NSDictionary<NSString*,id>*)currentSong {
     NSInteger pg=[self currentProgram];
@@ -367,6 +459,9 @@ Snapshot load(const State& s) noexcept {
 - (void)requestMMC:(uint8_t)command {
     if(!beat4::validMMCCommand(command))return;
     _state->mmcRequested.fetch_add(1,std::memory_order_relaxed);
-    _state->pendingMMC.store(command,std::memory_order_release);
+    const uint32_t generation=(_state->mmcNextGeneration.fetch_add(1,std::memory_order_relaxed)+1)&0x7fffffffU;
+    _state->mmcDelivery.store(beat4::mmcPackDelivery(generation,command,0,0,false),
+                              std::memory_order_release);
+    _state->displayRevision.fetch_add(1,std::memory_order_release);
 }
 @end

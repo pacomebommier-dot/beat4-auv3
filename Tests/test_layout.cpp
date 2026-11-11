@@ -15,6 +15,10 @@ int main(){
     assert(l.diagnostics.y+l.diagnostics.h <= l.bars.y);
     assert(l.bars.y+l.bars.h <= l.kick.y);
     assert(l.kick.y+l.kick.h < l.bpm.y+4);
+    Rect hp=beat4::hitRect(l.play), hpa=beat4::hitRect(l.pause), hs=beat4::hitRect(l.stop);
+    assert(hp.w>=44 && hp.h>=44 && hpa.w>=44 && hpa.h>=44 && hs.w>=44 && hs.h>=44);
+    assert(hp.x+hp.w<=hpa.x+.01);
+    assert(hpa.x+hpa.w<=hs.x+.01);
   }
   std::cout<<"Responsive layout PASS: 8 iPhone/iPad sizes, visible bars and controls\n";
 }

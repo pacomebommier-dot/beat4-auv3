@@ -1,4 +1,5 @@
 #include "../Beat4AU/Beat4Transport.hpp"
+#include "../Beat4AU/Beat4MMC.hpp"
 #include <cassert>
 #include <iostream>
 using beat4::HostMemory;
@@ -9,6 +10,31 @@ HostReading frame(bool moving, double beat, double samples, bool changed = false
     return {true, true, moving, changed, beat, samples};
 }
 int main() {
+    assert(beat4::mmcGoalReached(0x02,true,false));
+    assert(!beat4::mmcGoalReached(0x02,false,true));
+    assert(beat4::mmcGoalReached(0x09,false,false));
+    assert(!beat4::mmcGoalReached(0x09,true,false));
+    assert(beat4::mmcGoalReached(0x01,false,true));
+    assert(!beat4::mmcGoalReached(0x01,false,false));
+    assert(beat4::mmcGoalReached(0x05,false,true));
+    assert(!beat4::mmcGoalReached(0x05,false,false));
+    assert(beat4::mmcShouldAttempt(0x02,false,true,0,0));
+    assert(!beat4::mmcShouldAttempt(0x02,true,true,0,0));
+    assert(!beat4::mmcShouldAttempt(0x02,false,false,0,0));
+    assert(!beat4::mmcShouldAttempt(0x02,false,true,3,0));
+    assert(!beat4::mmcShouldAttempt(0x02,false,true,1,2));
+    assert(beat4::mmcRetryFrameGap(48000.0)==2400);
+    assert(beat4::mmcCooldownAfterFrames(2400,32)==2368);
+    assert(beat4::mmcCooldownAfterFrames(2400,4096)==0);
+    const auto delivery=beat4::mmcPackDelivery(7,0x02,1,2400,false);
+    assert(beat4::mmcDeliveryGeneration(delivery)==7);
+    assert(beat4::mmcDeliveryCommand(delivery)==0x02);
+    assert(beat4::mmcDeliveryAttempts(delivery)==1);
+    assert(beat4::mmcDeliveryCooldown(delivery)==2400);
+    assert(!beat4::mmcDeliveryFailed(delivery));
+    const auto failed=beat4::mmcPackDelivery(8,0,3,0,true);
+    assert(beat4::mmcDeliveryFailed(failed) && beat4::mmcDeliveryCommand(failed)==0);
+
     // Callback availability, return status, and payload validity are separate gates.
     assert(!beat4::validTransportReading(false, false, 0));
     assert(!beat4::validTransportReading(true, false, 0));

@@ -1,8 +1,16 @@
 #pragma once
 #include <cmath>
 #include <algorithm>
+#include <cstddef>
+#include <cstdint>
 
 namespace beat4 {
+inline std::size_t audioBytesForFrames(std::uint32_t frames,std::uint32_t channels,
+                                       std::size_t capacity) noexcept {
+    const std::size_t wanted=static_cast<std::size_t>(frames)*
+        static_cast<std::size_t>(std::max<std::uint32_t>(channels,1))*sizeof(float);
+    return std::min(wanted,capacity);
+}
 // Stateless pitch class mapping + inexpensive stateful kick synthesizer.
 // Attack transient is FIXED: only the sustained sub tail is tuned per song.
 class KickVoice {
@@ -47,15 +55,8 @@ private:
 };
 inline double pulseBrightness(double fraction) noexcept {
     if (!(fraction >= 0 && fraction <= 1)) return 0;
-    // Slow phosphor attack (~30% of beat) followed by a quicker release (~20%).
-    if (fraction < 0.30) {
-        double x = fraction / 0.30;
-        return x*x*(3-2*x);
-    }
-    if (fraction < 0.50) {
-        double x = 1 - (fraction-0.30)/0.20;
-        return x*x*(3-2*x);
-    }
-    return 0;
+    // One continuous phosphor bloom over the complete quarter note. The next
+    // bar takes over at the beat boundary; no threshold or second-stage core.
+    return fraction*fraction*(3-2*fraction);
 }
 }
