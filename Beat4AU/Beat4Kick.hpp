@@ -53,10 +53,4 @@ private:
     double bodyPhase_ = 0, transientPhase_ = 0;
     double age_ = 1, hp_ = 0, previous_ = 0;
 };
-inline double pulseBrightness(double fraction) noexcept {
-    if (!(fraction >= 0 && fraction <= 1)) return 0;
-    // One continuous phosphor bloom over the complete quarter note. The next
-    // bar takes over at the beat boundary; no threshold or second-stage core.
-    return fraction*fraction*(3-2*fraction);
-}
 }

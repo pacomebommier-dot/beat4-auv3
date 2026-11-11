@@ -8,11 +8,12 @@ int main(){
   for (auto [w,h] : {std::pair{320,200},{390,240},{375,270},{390,844},{430,932},
                     {700,400},{1024,768},{1194,834}}) {
     Layout l=beat4::layoutFor(w,h);
-    for(Rect r : {l.logo,l.diagnostics,l.bars,l.kick,l.subValue,l.levelSlider,l.bpm,l.song,l.play,l.pause,l.stop}) {
+    for(Rect r : {l.logo,l.version,l.diagnostics,l.bars,l.kick,l.subValue,l.levelSlider,l.bpm,l.song,l.play,l.pause,l.stop}) {
       if (!inside(r,w,h)) {std::cerr<<"Layout overflow "<<w<<"x"<<h<<": "<<r.x<<","<<r.y<<","<<r.w<<","<<r.h<<"\n"; return 1;}
     }
     assert(l.bars.h>=24 && l.bars.w>=100);
     assert(l.diagnostics.y+l.diagnostics.h <= l.bars.y);
+    assert(l.version.h<=14 && l.version.w>=40);
     assert(l.bars.y+l.bars.h <= l.kick.y);
     assert(l.kick.y+l.kick.h < l.bpm.y+4);
     Rect hp=beat4::hitRect(l.play), hpa=beat4::hitRect(l.pause), hs=beat4::hitRect(l.stop);

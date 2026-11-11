@@ -8,12 +8,20 @@
 #include "Beat4Songs.hpp"
 #include "Beat4Layout.hpp"
 #include "Beat4Display.hpp"
+#include "Beat4BPMGesture.hpp"
 
 static UIColor *RGB(CGFloat r,CGFloat g,CGFloat b,CGFloat a=1){
     return [UIColor colorWithRed:r/255.0 green:g/255.0 blue:b/255.0 alpha:a];
 }
 static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     return [UIFont monospacedSystemFontOfSize:sz weight:w];
+}
+static NSString *MMCName(int command){
+    if(command==0x02)return @"PLAY";
+    if(command==0x09)return @"PAUSE";
+    if(command==0x01)return @"STOP";
+    if(command==0x05)return @"REW";
+    return @"--";
 }
 @interface Beat4Button : UIButton @end
 @implementation Beat4Button
@@ -38,15 +46,15 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     const BOOL moving=[self.snapshot[@"moving"] boolValue];
     const int active=[self.snapshot[@"active"] intValue];
     const double fraction=[self.snapshot[@"fraction"] doubleValue];
-    const CGFloat pulse=(synced&&moving)?static_cast<CGFloat>(beat4::pulseBrightness(fraction)):0;
     const CGRect area=self.lightBounds;
-    const CGFloat gap=std::max((CGFloat)18,std::min((CGFloat)56,area.size.width*.083));
+    const CGFloat gap=static_cast<CGFloat>(beat4::beatBarGap(area.size.width));
     const CGFloat bw=(area.size.width-3*gap)/4;
     CGContextRef ctx=UIGraphicsGetCurrentContext();
     if(!ctx || bw<=0)return;
     for(int i=0;i<4;++i){
         CGRect r=CGRectMake(CGRectGetMinX(area)+i*(bw+gap),CGRectGetMinY(area),bw,CGRectGetHeight(area));
-        CGFloat energy=(synced&&moving&&i==active)?pulse:0;
+        const CGFloat energy=(synced&&moving)
+            ? static_cast<CGFloat>(beat4::barBrightness(i,active,fraction)) : 0;
         const CGFloat corner=std::max((CGFloat)3,std::min((CGFloat)7,bw*.10));
         UIBezierPath *shape=[UIBezierPath bezierPathWithRoundedRect:r cornerRadius:corner];
         // The physical segment remains visible at rest, with no animated core.
@@ -86,7 +94,7 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
 @property(nonatomic,strong)Beat4AudioUnit *unit;
 @property(nonatomic,strong)Beat4Canvas *canvas;
 @property(nonatomic,strong)CADisplayLink *clock;
-@property(nonatomic,strong)UILabel *logo,*host,*diagnostics,*pgLabel,*subLabel,*levelLabel;
+@property(nonatomic,strong)UILabel *logo,*versionLabel,*host,*diagnostics,*pgLabel,*subLabel,*levelLabel;
 @property(nonatomic,strong)UIButton *kickButton,*noteButton,*songButton,*bpmButton;
 @property(nonatomic,strong)UIButton *playButton,*pauseButton,*stopButton;
 @property(nonatomic,strong)UISlider *levelSlider;
@@ -94,6 +102,8 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
 @property(nonatomic,assign)uint64_t seenRevision;
 @property(nonatomic,assign)CFTimeInterval lastWatchdog;
 @property(nonatomic,assign)BOOL lastMoving,lastSynced;
+@property(nonatomic,assign)BOOL bpmDragging;
+@property(nonatomic,assign)NSInteger bpmDragProgram,bpmDragStart,bpmDragValue;
 @end
 @implementation Beat4ViewController
 - (AUAudioUnit *)createAudioUnitWithComponentDescription:(AudioComponentDescription)desc
@@ -127,6 +137,8 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     self.seenRevision=0;self.lastWatchdog=0;
     _logo=[self makeLabel:@"BEAT//4" size:20 color:RGB(220,224,212)];
     _logo.font=Mono(20,UIFontWeightSemibold);
+    NSString *version=[[NSBundle bundleForClass:self.class] objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"?";
+    _versionLabel=[self makeLabel:[NSString stringWithFormat:@"v%@",version] size:8 color:RGB(91,106,90)];
     _host=[self makeLabel:@"AUM  •  WAIT" size:11 color:RGB(144,161,140)];_host.textAlignment=NSTextAlignmentRight;
     _diagnostics=[self makeLabel:@"RENDER WAIT | TRANSPORT WAIT | MUSICAL WAIT | MMC WAIT" size:8 color:RGB(117,133,114)];
     _diagnostics.adjustsFontSizeToFitWidth=YES;_diagnostics.minimumScaleFactor=.55;
@@ -148,8 +160,12 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     _levelSlider.accessibilityLabel=@"Kick level";
     _songButton=[self makeButton:@"UNKNOWN" size:20];
     [_songButton addTarget:self action:@selector(editSong:) forControlEvents:UIControlEventTouchUpInside];
-    _bpmButton=[self makeButton:@"--.- BPM" size:27];
-    [_bpmButton addTarget:self action:@selector(editBPM:) forControlEvents:UIControlEventTouchUpInside];
+    _bpmButton=[self makeButton:@"--- BPM" size:27];
+    UIPanGestureRecognizer *bpmPan=[[UIPanGestureRecognizer alloc]initWithTarget:self action:@selector(dragBPM:)];
+    bpmPan.minimumNumberOfTouches=1;bpmPan.maximumNumberOfTouches=1;
+    [_bpmButton addGestureRecognizer:bpmPan];
+    _bpmButton.accessibilityLabel=@"Song BPM";
+    _bpmButton.accessibilityHint=@"Glisser horizontalement, quatre points par BPM";
     _playButton=[self makeTransportButton:@"▶" size:20];
     _pauseButton=[self makeTransportButton:@"Ⅱ" size:20];
     _stopButton=[self makeTransportButton:@"■" size:20];
@@ -163,6 +179,7 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     const beat4::Layout l=beat4::layoutFor(self.view.bounds.size.width,self.view.bounds.size.height);
     auto frame=[](beat4::Rect r) {return CGRectMake(r.x,r.y,r.w,r.h);};
     _logo.frame=frame(l.logo);
+    _versionLabel.frame=frame(l.version);
     _host.frame=frame(l.host);
     _diagnostics.frame=frame(l.diagnostics);
     _host.hidden=l.transportsInHeader && self.view.bounds.size.width<380;
@@ -185,6 +202,7 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     _bpmButton.titleLabel.font=Mono(narrow?19:27,UIFontWeightMedium);
     _songButton.titleLabel.font=Mono(narrow?16:20,UIFontWeightMedium);
     _logo.font=Mono(narrow?17:20,UIFontWeightSemibold);
+    _versionLabel.font=Mono(8);
     _pgLabel.font=Mono(l.transportsInHeader?9:11);
     _diagnostics.font=Mono(l.transportsInHeader?7:8);
 }
@@ -210,7 +228,9 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     NSString *name=song[@"title"] ?: @"UNKNOWN";
     [_songButton setTitle:name forState:UIControlStateNormal];
     double bpm=[song[@"bpm"] doubleValue];
-    [_bpmButton setTitle:bpm>=20?[NSString stringWithFormat:@"%.1f BPM",bpm]:@"--.- BPM" forState:UIControlStateNormal];
+    if(!self.bpmDragging || self.bpmDragProgram!=pg)
+        [_bpmButton setTitle:bpm>=20?[NSString stringWithFormat:@"%ld BPM",(long)std::lround(bpm)]:@"--- BPM"
+                    forState:UIControlStateNormal];
     int note=[song[@"sub"] intValue];
     [_noteButton setTitle:[NSString stringWithUTF8String:beat4::noteName(note)] forState:UIControlStateNormal];
     BOOL enabled=[[self.unit transportSnapshot][@"kickEnabled"] boolValue];
@@ -229,24 +249,41 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     }]];
     [self presentViewController:a animated:YES completion:nil];
 }
-- (void)editBPM:(id)sender {
-    (void)sender;if([self.unit currentProgram]<0)return;
-    UIAlertController *a=[UIAlertController alertControllerWithTitle:@"SONG BPM" message:@"20 à 240 BPM · rappel automatique sur PG" preferredStyle:UIAlertControllerStyleAlert];
-    double current=[[self.unit currentSong][@"bpm"] doubleValue];
-    [a addTextFieldWithConfigurationHandler:^(UITextField* f){
-        f.keyboardType=UIKeyboardTypeDecimalPad;
-        if(current>0)f.text=[NSString stringWithFormat:@"%.1f",current];
-        f.placeholder=@"128.0";
-    }];
-    __weak Beat4ViewController *weakSelf = self;
-    [a addAction:[UIAlertAction actionWithTitle:@"Annuler" style:UIAlertActionStyleCancel handler:nil]];
-    [a addAction:[UIAlertAction actionWithTitle:@"Enregistrer" style:UIAlertActionStyleDefault handler:^(UIAlertAction* action){
-        (void)action;
-        NSString *value=[a.textFields.firstObject.text stringByReplacingOccurrencesOfString:@"," withString:@"."];
-        double bpm=value.doubleValue;
-        if(beat4::validBPM(bpm)){[weakSelf.unit saveSongBPM:bpm];[weakSelf refreshSong];}
-    }]];
-    [self presentViewController:a animated:YES completion:nil];
+- (void)dragBPM:(UIPanGestureRecognizer*)gesture {
+    if(gesture.state==UIGestureRecognizerStateBegan){
+        const NSInteger pg=[self.unit currentProgram];
+        if(!beat4::validProgram((int)pg))return;
+        const double saved=[[self.unit currentSong][@"bpm"] doubleValue];
+        const double host=[[[self.unit transportSnapshot] objectForKey:@"bpm"] doubleValue];
+        self.bpmDragProgram=pg;
+        self.bpmDragStart=beat4::initialDraggedBPM(saved,host);
+        self.bpmDragValue=self.bpmDragStart;
+        self.bpmDragging=YES;
+        [_bpmButton setTitle:[NSString stringWithFormat:@"%ld BPM",(long)self.bpmDragValue]
+                    forState:UIControlStateNormal];
+        return;
+    }
+    if(!self.bpmDragging)return;
+    const BOOL sameProgram=[self.unit currentProgram]==self.bpmDragProgram;
+    if(gesture.state==UIGestureRecognizerStateChanged && sameProgram){
+        const CGFloat dx=[gesture translationInView:self.view].x;
+        const NSInteger next=beat4::draggedBPM((int)self.bpmDragStart,dx);
+        if(next!=self.bpmDragValue){
+            self.bpmDragValue=next;
+            [_bpmButton setTitle:[NSString stringWithFormat:@"%ld BPM",(long)next]
+                        forState:UIControlStateNormal];
+        }
+        return;
+    }
+    if(gesture.state==UIGestureRecognizerStateEnded ||
+       gesture.state==UIGestureRecognizerStateCancelled ||
+       gesture.state==UIGestureRecognizerStateFailed || !sameProgram){
+        const BOOL save=gesture.state==UIGestureRecognizerStateEnded && sameProgram;
+        const NSInteger value=self.bpmDragValue;
+        self.bpmDragging=NO;
+        if(save)[self.unit saveSongBPM:value];
+        [self refreshSong];
+    }
 }
 - (void)toggleKick:(id)sender {
     (void)sender;
@@ -287,7 +324,16 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     NSString *transport=([data[@"transportCallback"] boolValue]&&[data[@"transportReturned"] boolValue])?@"TRANSPORT OK":@"TRANSPORT WAIT";
     NSString *musical=([data[@"musicalCallback"] boolValue]&&[data[@"musicalReturned"] boolValue])?@"MUSICAL OK":@"MUSICAL WAIT";
     const int pending=[data[@"mmcPending"] intValue];
-    NSString *mmc=![data[@"midiOut"] boolValue]?@"MMC WAIT":([data[@"mmcFailed"] boolValue]?@"MMC ERROR":(pending?[NSString stringWithFormat:@"MMC %02X",pending]:@"MMC READY"));
+    const int acknowledged=[data[@"mmcAcknowledged"] intValue];
+    const int requestAttempts=[data[@"mmcRequestAttempts"] intValue];
+    NSString *mmc=nil;
+    if(![data[@"midiOut"] boolValue])mmc=@"MMC NO CALLBACK";
+    else if(pending)mmc=[NSString stringWithFormat:@"MMC %@ %d/3",MMCName(pending),requestAttempts];
+    else if([data[@"mmcFailed"] boolValue]){
+        const int status=[data[@"mmcLastStatus"] intValue];
+        mmc=status==noErr?@"MMC NO ACK":[NSString stringWithFormat:@"MMC SEND %d",status];
+    }else if(acknowledged)mmc=[NSString stringWithFormat:@"MMC ACK %@",MMCName(acknowledged)];
+    else mmc=@"MMC READY";
     NSString *diagnostics=[NSString stringWithFormat:@"%@ | %@ | %@ | %@ | BPM %.1f | %@",
         render,transport,musical,moving?@"PLAY":@"STOP",[data[@"bpm"] doubleValue],mmc];
     if(![_diagnostics.text isEqualToString:diagnostics])_diagnostics.text=diagnostics;

@@ -35,6 +35,42 @@ int main() {
     const auto failed=beat4::mmcPackDelivery(8,0,3,0,true);
     assert(beat4::mmcDeliveryFailed(failed) && beat4::mmcDeliveryCommand(failed)==0);
 
+    // V0.5.3: callback errors fail immediately; only accepted sends may retry.
+    const auto requested=beat4::mmcPackDelivery(9,0x02,0,0,false);
+    auto decision=beat4::mmcRenderDecision(requested,false,true,512);
+    assert(decision.action==beat4::MMCAction::Send);
+    const auto rejected=beat4::mmcAfterSend(decision.nextWord,-50,48000.0);
+    assert(beat4::mmcDeliveryFailed(rejected));
+    assert(beat4::mmcDeliveryCommand(rejected)==0);
+    assert(beat4::mmcDeliveryAttempts(rejected)==1);
+
+    const auto accepted1=beat4::mmcAfterSend(decision.nextWord,0,48000.0);
+    assert(!beat4::mmcDeliveryFailed(accepted1));
+    assert(beat4::mmcDeliveryCommand(accepted1)==0x02);
+    assert(beat4::mmcDeliveryAttempts(accepted1)==1);
+    assert(beat4::mmcDeliveryCooldown(accepted1)==2400);
+    decision=beat4::mmcRenderDecision(accepted1,false,true,512);
+    assert(decision.action==beat4::MMCAction::None);
+    assert(beat4::mmcDeliveryCooldown(decision.nextWord)==1888);
+
+    decision=beat4::mmcRenderDecision(decision.nextWord,true,true,512);
+    assert(decision.action==beat4::MMCAction::Acknowledge);
+    assert(beat4::mmcDeliveryCommand(decision.nextWord)==0);
+
+    auto third=beat4::mmcPackDelivery(10,0x01,3,0,false);
+    decision=beat4::mmcRenderDecision(third,false,true,512);
+    assert(decision.action==beat4::MMCAction::FailNoAck);
+    assert(beat4::mmcDeliveryFailed(decision.nextWord));
+    assert(beat4::mmcDeliveryCommand(decision.nextWord)==0);
+
+    decision=beat4::mmcRenderDecision(requested,false,false,512);
+    assert(decision.action==beat4::MMCAction::None);
+    assert(decision.nextWord==requested);
+    assert(beat4::hostCallbacksMustRefresh(true,false,false));
+    assert(beat4::hostCallbacksMustRefresh(false,true,false));
+    assert(beat4::hostCallbacksMustRefresh(false,false,true));
+    assert(!beat4::hostCallbacksMustRefresh(false,false,false));
+
     // Callback availability, return status, and payload validity are separate gates.
     assert(!beat4::validTransportReading(false, false, 0));
     assert(!beat4::validTransportReading(true, false, 0));

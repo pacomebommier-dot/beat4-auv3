@@ -1,5 +1,6 @@
 #include "../Beat4AU/Beat4Songs.hpp"
 #include "../Beat4AU/Beat4Kick.hpp"
+#include "../Beat4AU/Beat4BPMGesture.hpp"
 #include <cassert>
 #include <cmath>
 #include <iostream>
@@ -21,13 +22,16 @@ int main(){
     assert(std::abs(pitchBend14(130)-8192)<=1);
     assert(pitchBend14(0)==-1);
     assert(pitchBend14(241)==-1);
-    const double glow0=pulseBrightness(0.0), glow1=pulseBrightness(0.25);
-    const double glow2=pulseBrightness(0.50), glow3=pulseBrightness(0.75);
-    const double glow4=pulseBrightness(0.99);
-    assert(glow0==0);
-    assert(glow0<glow1 && glow1<glow2 && glow2<glow3 && glow3<glow4);
-    assert(glow4>.99);
-    assert(pulseBrightness(-0.01)==0 && pulseBrightness(1.01)==0);
+    // V0.5.3 BPM scrub: integers, 4 screen points per BPM, host fallback.
+    assert(initialDraggedBPM(128.4,120.0)==128);
+    assert(initialDraggedBPM(0,126.6)==127);
+    assert(initialDraggedBPM(0,0)==120);
+    assert(draggedBPM(128,3.99)==128);
+    assert(draggedBPM(128,4.0)==129);
+    assert(draggedBPM(128,-3.99)==128);
+    assert(draggedBPM(128,-8.0)==126);
+    assert(draggedBPM(239,40.0)==240);
+    assert(draggedBPM(21,-40.0)==20);
     assert(audioBytesForFrames(512,1,8192)==2048);
     assert(audioBytesForFrames(512,2,8192)==4096);
     assert(audioBytesForFrames(512,2,1024)==1024);

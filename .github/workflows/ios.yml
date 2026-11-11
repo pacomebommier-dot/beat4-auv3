@@ -48,9 +48,9 @@ jobs:
           mkdir -p "$RUNNER_TEMP/Payload"
           cp -a "$RUNNER_TEMP/Beat4DerivedData/Build/Products/Release-iphoneos/BEAT4.app" "$RUNNER_TEMP/Payload/"
           cd "$RUNNER_TEMP"
-          zip -qry "$GITHUB_WORKSPACE/BEAT4_V0_5_2_TRANSPORT_UI_UNSIGNED.ipa" Payload
+          zip -qry "$GITHUB_WORKSPACE/BEAT4_V0_5_3_TRANSPORT_BPM_UNSIGNED.ipa" Payload
       - uses: actions/upload-artifact@v4
         with:
-          name: BEAT4-V0-5-2-TRANSPORT-UI-UNSIGNED-IPA
-          path: BEAT4_V0_5_2_TRANSPORT_UI_UNSIGNED.ipa
+          name: BEAT4-V0-5-3-TRANSPORT-BPM-UNSIGNED-IPA
+          path: BEAT4_V0_5_3_TRANSPORT_BPM_UNSIGNED.ipa
           if-no-files-found: error

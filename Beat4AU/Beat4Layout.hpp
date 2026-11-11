@@ -9,7 +9,7 @@ inline Rect hitRect(Rect visual,double minimum=44.0) noexcept {
     return {visual.x-(w-visual.w)*.5,visual.y-(h-visual.h)*.5,w,h};
 }
 struct Layout {
-    Rect logo, host, diagnostics, pg, bars, kick, subLabel, subValue, levelLabel, levelSlider;
+    Rect logo, version, host, diagnostics, pg, bars, kick, subLabel, subValue, levelLabel, levelSlider;
     Rect song, bpm, play, pause, stop;
     bool transportsInHeader = false;
 };
@@ -21,6 +21,7 @@ inline Layout layoutFor(double W, double H) noexcept {
     const double pad = std::clamp(W*0.044,12.0,38.0);
     const double headerY = compact ? 7.0 : std::max(12.0,H*0.028);
     l.logo = {pad,headerY,narrow?W*.40:W*.30,28};
+    l.version = {pad+(narrow?86.0:108.0),headerY+8,52,12};
     l.host = compact ? Rect{W*.48,headerY+6,W*.17,15} : Rect{W*.65,headerY+6,W*.15,18};
     l.diagnostics = {pad,headerY+31,W-2*pad,compact?10.0:14.0};
     l.transportsInHeader=compact;
