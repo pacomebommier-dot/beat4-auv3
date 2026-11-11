@@ -239,7 +239,7 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     if(pg!=self.seenPG){self.seenPG=pg;[self refreshSong];}
     BOOL synced=[data[@"synced"] boolValue];
     BOOL moving=[data[@"moving"] boolValue];
-    _host.text=synced?[NSString stringWithFormat:@"AUM %.1f %@",[data[@"bpm"] doubleValue],moving?@"▶":@"Ⅱ"]:@"AUM WAIT";
+    _host.text=synced?[NSString stringWithFormat:@"AUM %.1f %@",[data[@"bpm"] doubleValue],moving?@"▶":@"Ⅱ"] : (![data[@"hasRender"] boolValue]?@"AUM NO AUDIO":@"AUM NO HOST");
     BOOL enabled=[data[@"kickEnabled"] boolValue];
     [_kickButton setTitleColor:enabled?RGB(177,225,164):RGB(110,120,111) forState:UIControlStateNormal];
     if(!_levelSlider.tracking)_levelSlider.value=[data[@"kickLevel"] floatValue];
