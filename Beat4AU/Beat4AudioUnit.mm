@@ -187,12 +187,12 @@ Snapshot load(const State& s) noexcept {
     @synchronized(self){
         const bool missing=!_cachedTransport || !_cachedMusical || !_cachedMIDIOutput;
         if(!beat4::hostCallbacksMustRefresh(replace,requestStarted,missing))return;
-        AUHostTransportStateBlock transport=(replace || !_cachedTransport)
-            ? [self.transportStateBlock copy] : _cachedTransport;
-        AUHostMusicalContextBlock musical=(replace || !_cachedMusical)
-            ? [self.musicalContextBlock copy] : _cachedMusical;
-        AUMIDIOutputEventBlock midi=(replace || !_cachedMIDIOutput)
-            ? [self.MIDIOutputEventBlock copy] : _cachedMIDIOutput;
+        AUHostTransportStateBlock transport=_cachedTransport;
+        AUHostMusicalContextBlock musical=_cachedMusical;
+        AUMIDIOutputEventBlock midi=_cachedMIDIOutput;
+        if(replace || !transport)transport=[self.transportStateBlock copy];
+        if(replace || !musical)musical=[self.musicalContextBlock copy];
+        if(replace || !midi)midi=[self.MIDIOutputEventBlock copy];
         const bool changed=transport!=_cachedTransport || musical!=_cachedMusical ||
                            midi!=_cachedMIDIOutput;
         if(transport && transport!=_cachedTransport)[_hostCallbackKeepalive addObject:transport];
