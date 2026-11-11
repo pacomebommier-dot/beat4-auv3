@@ -30,7 +30,7 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     const double fraction=[self.snapshot[@"fraction"] doubleValue];
     const CGFloat pulse=(synced&&moving)?static_cast<CGFloat>(beat4::pulseBrightness(fraction)):0;
     const CGRect area=self.lightBounds;
-    const CGFloat gap=std::max((CGFloat)18,std::min((CGFloat)56,area.size.width*.083));
+    const CGFloat gap=std::max((CGFloat)18,std::min((CGFloat)56,area.size.width*.105));
     const CGFloat bw=(area.size.width-3*gap)/4;
     CGContextRef ctx=UIGraphicsGetCurrentContext();
     if(!ctx || bw<=0)return;
@@ -72,6 +72,9 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
 @property(nonatomic,strong)UIButton *playButton,*pauseButton,*stopButton;
 @property(nonatomic,strong)UISlider *levelSlider;
 @property(nonatomic,assign)NSInteger seenPG;
+@property(nonatomic,assign)double bpmDragStart;
+@property(nonatomic,assign)CGFloat bpmDragOriginX;
+@property(nonatomic,assign)NSInteger bpmDragProgram;
 @end
 @implementation Beat4ViewController
 - (AUAudioUnit *)createAudioUnitWithComponentDescription:(AudioComponentDescription)desc
@@ -116,8 +119,11 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     _levelSlider.accessibilityLabel=@"Kick level";
     _songButton=[self makeButton:@"UNKNOWN" size:20];
     [_songButton addTarget:self action:@selector(editSong:) forControlEvents:UIControlEventTouchUpInside];
-    _bpmButton=[self makeButton:@"--.- BPM" size:27];
-    [_bpmButton addTarget:self action:@selector(editBPM:) forControlEvents:UIControlEventTouchUpInside];
+    _bpmButton=[self makeButton:@"--- BPM" size:27];
+    UIPanGestureRecognizer *bpmPan=[[UIPanGestureRecognizer alloc]initWithTarget:self action:@selector(dragBPM:)];
+    bpmPan.maximumNumberOfTouches=1;
+    [_bpmButton addGestureRecognizer:bpmPan];
+    _bpmButton.accessibilityHint=@"Glisser horizontalement pour régler le BPM entier, un BPM par 9 points";
     _playButton=[self makeButton:@"▶" size:20];
     _pauseButton=[self makeButton:@"Ⅱ" size:20];
     _stopButton=[self makeButton:@"■" size:20];
@@ -176,7 +182,7 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     NSString *name=song[@"title"] ?: @"UNKNOWN";
     [_songButton setTitle:name forState:UIControlStateNormal];
     double bpm=[song[@"bpm"] doubleValue];
-    [_bpmButton setTitle:bpm>=20?[NSString stringWithFormat:@"%.1f BPM",bpm]:@"--.- BPM" forState:UIControlStateNormal];
+    [_bpmButton setTitle:bpm>=20?[NSString stringWithFormat:@"%.0f BPM",std::round(bpm)]:@"--- BPM" forState:UIControlStateNormal];
     int note=[song[@"sub"] intValue];
     [_noteButton setTitle:[NSString stringWithUTF8String:beat4::noteName(note)] forState:UIControlStateNormal];
     BOOL enabled=[[self.unit transportSnapshot][@"kickEnabled"] boolValue];
@@ -195,24 +201,30 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     }]];
     [self presentViewController:a animated:YES completion:nil];
 }
-- (void)editBPM:(id)sender {
-    (void)sender;if([self.unit currentProgram]<0)return;
-    UIAlertController *a=[UIAlertController alertControllerWithTitle:@"SONG BPM" message:@"20 à 240 BPM · rappel automatique sur PG" preferredStyle:UIAlertControllerStyleAlert];
-    double current=[[self.unit currentSong][@"bpm"] doubleValue];
-    [a addTextFieldWithConfigurationHandler:^(UITextField* f){
-        f.keyboardType=UIKeyboardTypeDecimalPad;
-        if(current>0)f.text=[NSString stringWithFormat:@"%.1f",current];
-        f.placeholder=@"128.0";
-    }];
-    __weak Beat4ViewController *weakSelf = self;
-    [a addAction:[UIAlertAction actionWithTitle:@"Annuler" style:UIAlertActionStyleCancel handler:nil]];
-    [a addAction:[UIAlertAction actionWithTitle:@"Enregistrer" style:UIAlertActionStyleDefault handler:^(UIAlertAction* action){
-        (void)action;
-        NSString *value=[a.textFields.firstObject.text stringByReplacingOccurrencesOfString:@"," withString:@"."];
-        double bpm=value.doubleValue;
-        if(beat4::validBPM(bpm)){[weakSelf.unit saveSongBPM:bpm];[weakSelf refreshSong];}
-    }]];
-    [self presentViewController:a animated:YES completion:nil];
+- (void)dragBPM:(UIPanGestureRecognizer*)gesture {
+    NSInteger pg=[self.unit currentProgram];
+    if(pg<0)return;
+    if(gesture.state==UIGestureRecognizerStateBegan){
+        self.bpmDragProgram=pg;
+        double stored=[[self.unit currentSong][@"bpm"] doubleValue];
+        double host=[[self.unit transportSnapshot][@"bpm"] doubleValue];
+        self.bpmDragStart=std::round(beat4::validBPM(stored)?stored:(beat4::validBPM(host)?host:128));
+        self.bpmDragOriginX=0;
+    }
+    if(pg!=self.bpmDragProgram)return;
+    if(gesture.state==UIGestureRecognizerStateChanged ||
+       gesture.state==UIGestureRecognizerStateEnded){
+        // Absolute displacement, not accumulated deltas: no runaway or drift.
+        CGFloat dx=[gesture translationInView:self.view].x-self.bpmDragOriginX;
+        double target=std::clamp(self.bpmDragStart+std::round(dx/9.0),20.0,240.0);
+        [_bpmButton setTitle:[NSString stringWithFormat:@"%.0f BPM",target] forState:UIControlStateNormal];
+        if(gesture.state==UIGestureRecognizerStateEnded){
+            [self.unit saveSongBPM:target];
+            [self refreshSong];
+        }
+    }
+    if(gesture.state==UIGestureRecognizerStateCancelled ||
+       gesture.state==UIGestureRecognizerStateFailed)[self refreshSong];
 }
 - (void)toggleKick:(id)sender {
     (void)sender;
@@ -239,7 +251,7 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     if(pg!=self.seenPG){self.seenPG=pg;[self refreshSong];}
     BOOL synced=[data[@"synced"] boolValue];
     BOOL moving=[data[@"moving"] boolValue];
-    _host.text=synced?[NSString stringWithFormat:@"AUM %.1f %@",[data[@"bpm"] doubleValue],moving?@"▶":@"Ⅱ"] : (![data[@"hasRender"] boolValue]?@"AUM NO AUDIO":@"AUM NO HOST");
+    _host.text=synced?[NSString stringWithFormat:@"AUM %.1f %@ · v0.5.3",[data[@"bpm"] doubleValue],moving?@"▶":@"Ⅱ"] : (![data[@"hasRender"] boolValue]?@"AUM NO AUDIO · v0.5.3":@"AUM NO HOST · v0.5.3");
     BOOL enabled=[data[@"kickEnabled"] boolValue];
     [_kickButton setTitleColor:enabled?RGB(177,225,164):RGB(110,120,111) forState:UIControlStateNormal];
     if(!_levelSlider.tracking)_levelSlider.value=[data[@"kickLevel"] floatValue];
