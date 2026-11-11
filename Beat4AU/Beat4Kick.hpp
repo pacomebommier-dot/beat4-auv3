@@ -47,14 +47,16 @@ private:
 };
 inline double pulseBrightness(double fraction) noexcept {
     if (!(fraction >= 0 && fraction <= 1)) return 0;
-    // Slow phosphor attack (~30% of beat) followed by a quicker release (~20%).
-    if (fraction < 0.30) {
-        double x = fraction / 0.30;
-        return x*x*(3-2*x);
+    // Phosphor: slower attack, quicker but continuous decay with zero slope
+    // at both ends. A longer tail avoids an abrupt switch-off.
+    if (fraction < 0.34) {
+        const double x = fraction / 0.34;
+        return x*x*(3.0-2.0*x);
     }
-    if (fraction < 0.50) {
-        double x = 1 - (fraction-0.30)/0.20;
-        return x*x*(3-2*x);
+    if (fraction < 0.68) {
+        const double x = (fraction-0.34)/0.34;
+        const double smooth=x*x*(3.0-2.0*x);
+        return 1.0-smooth;
     }
     return 0;
 }
