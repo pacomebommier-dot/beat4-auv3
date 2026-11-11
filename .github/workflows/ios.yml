@@ -10,7 +10,7 @@ on:
       - 'Tests/**'
       - '.github/workflows/ios.yml'
   push:
-    branches: [main]
+    branches: [main, debug/transport-diagnostics-20261111]
     paths:
       - 'Beat4AU/**'
       - 'Beat4App/**'
