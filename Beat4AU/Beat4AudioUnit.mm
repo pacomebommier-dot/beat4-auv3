@@ -33,6 +33,13 @@ struct State {
     std::atomic<bool> midiOutputConfigured{false};
     State() {for(int i=0;i<128;++i){notes[i].store(-1);tempos[i].store(0);}}
 };
+// Stable, realtime-readable callback slots. Host callbacks are installed during
+// allocateRenderResources, which can occur after internalRenderBlock is queried.
+struct HostHooks {
+    std::atomic<void *> transport{nullptr};
+    std::atomic<void *> musical{nullptr};
+    std::atomic<void *> midiOut{nullptr};
+};
 struct Snapshot {
     uint64_t tick, callbacks;
     double beat, bpm, samplePosition, bufferSeconds;
@@ -65,6 +72,7 @@ Snapshot load(const State& s) noexcept {
     AUParameter *_levelParameter;
     AUParameter *_enabledParameter;
     std::shared_ptr<State> _state;
+    std::shared_ptr<HostHooks> _hostHooks;
     std::shared_ptr<beat4::HostMemory> _hostMemory;
     std::shared_ptr<beat4::KickVoice> _kickVoice;
     std::shared_ptr<beat4::BeatGate> _beatGate;
@@ -82,6 +90,7 @@ Snapshot load(const State& s) noexcept {
     self=[super initWithComponentDescription:desc options:options error:outError];
     if(!self)return nil;
     _state=std::make_shared<State>();
+    _hostHooks=std::make_shared<HostHooks>();
     _hostMemory=std::make_shared<beat4::HostMemory>();
     _kickVoice=std::make_shared<beat4::KickVoice>();
     _beatGate=std::make_shared<beat4::BeatGate>();
@@ -135,10 +144,16 @@ Snapshot load(const State& s) noexcept {
     _cachedTransport=[self.transportStateBlock copy];
     _cachedMusical=[self.musicalContextBlock copy];
     _cachedMIDIOutput=[self.MIDIOutputEventBlock copy];
+    _hostHooks->transport.store((__bridge void *)_cachedTransport,std::memory_order_release);
+    _hostHooks->musical.store((__bridge void *)_cachedMusical,std::memory_order_release);
+    _hostHooks->midiOut.store((__bridge void *)_cachedMIDIOutput,std::memory_order_release);
     _state->midiOutputConfigured.store(_cachedMIDIOutput != nil);
     return YES;
 }
 - (void)deallocateRenderResources {
+    _hostHooks->transport.store(nullptr,std::memory_order_release);
+    _hostHooks->musical.store(nullptr,std::memory_order_release);
+    _hostHooks->midiOut.store(nullptr,std::memory_order_release);
     [super deallocateRenderResources];
     _cachedTransport=nil; _cachedMusical=nil; _cachedMIDIOutput=nil;
     _state->midiOutputConfigured.store(false);
@@ -148,15 +163,18 @@ Snapshot load(const State& s) noexcept {
     const std::shared_ptr<beat4::HostMemory> memory=_hostMemory;
     const std::shared_ptr<beat4::KickVoice> voice=_kickVoice;
     const std::shared_ptr<beat4::BeatGate> gate=_beatGate;
-    const AUHostTransportStateBlock transport=_cachedTransport;
-    const AUHostMusicalContextBlock musical=_cachedMusical;
-    const AUMIDIOutputEventBlock midiOut=_cachedMIDIOutput;
+    const std::shared_ptr<HostHooks> hooks=_hostHooks;
     const double sampleRate=_output.format.sampleRate;
     return ^AUAudioUnitStatus(AudioUnitRenderActionFlags *actionFlags,
          const AudioTimeStamp *timestamp, AVAudioFrameCount frameCount, NSInteger outputBusNumber,
          AudioBufferList *outputData, const AURenderEvent *events, AURenderPullInputBlock pullInput) {
         (void)actionFlags;(void)outputBusNumber;(void)pullInput;
         State *s=shared.get();
+        // Resolve callbacks when rendering, not when the host first queries the
+        // block. The backing blocks remain retained in the AU while allocated.
+        const AUHostTransportStateBlock transport=(__bridge AUHostTransportStateBlock)hooks->transport.load(std::memory_order_acquire);
+        const AUHostMusicalContextBlock musical=(__bridge AUHostMusicalContextBlock)hooks->musical.load(std::memory_order_acquire);
+        const AUMIDIOutputEventBlock midiOut=(__bridge AUMIDIOutputEventBlock)hooks->midiOut.load(std::memory_order_acquire);
         const auto sampleTime=(timestamp && (timestamp->mFlags & kAudioTimeStampSampleTimeValid))
             ? static_cast<AUEventSampleTime>(timestamp->mSampleTime) : AUEventSampleTimeImmediate;
         for(const AURenderEvent *e=events;e!=nullptr;e=e->head.next){
