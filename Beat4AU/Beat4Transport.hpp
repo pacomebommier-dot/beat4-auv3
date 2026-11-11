@@ -6,6 +6,21 @@
 
 namespace beat4 {
 
+inline bool validTransportReading(bool callbackPresent, bool callbackReturned,
+                                  double samplePosition) noexcept {
+    return callbackPresent && callbackReturned && std::isfinite(samplePosition);
+}
+
+inline bool validMusicalReading(bool callbackPresent, bool callbackReturned, double tempo,
+                                double beatsPerBar, int denominator, double beat) noexcept {
+    return callbackPresent && callbackReturned && std::isfinite(tempo) && tempo > 0 &&
+           std::isfinite(beatsPerBar) && beatsPerBar == 4 && denominator == 4 && std::isfinite(beat);
+}
+
+inline bool validMMCCommand(int command) noexcept {
+    return command == 0x01 || command == 0x02 || command == 0x05 || command == 0x09;
+}
+
 enum class HostMode : int {
     Unknown = 0,
     Play = 1,

@@ -21,9 +21,16 @@ int main(){
     assert(std::abs(pitchBend14(130)-8192)<=1);
     assert(pitchBend14(0)==-1);
     assert(pitchBend14(241)==-1);
-    assert(pulseBrightness(0.0)==0);
-    assert(pulseBrightness(0.3)>.99);
-    assert(pulseBrightness(0.50)==0);
+    const double glow0=pulseBrightness(0.0), glow1=pulseBrightness(0.25);
+    const double glow2=pulseBrightness(0.50), glow3=pulseBrightness(0.75);
+    const double glow4=pulseBrightness(0.99);
+    assert(glow0==0);
+    assert(glow0<glow1 && glow1<glow2 && glow2<glow3 && glow3<glow4);
+    assert(glow4>.99);
+    assert(pulseBrightness(-0.01)==0 && pulseBrightness(1.01)==0);
+    assert(audioBytesForFrames(512,1,8192)==2048);
+    assert(audioBytesForFrames(512,2,8192)==4096);
+    assert(audioBytesForFrames(512,2,1024)==1024);
     KickVoice k; k.trigger();
     double peak=0;
     for(int i=0;i<24000;++i) {double s=k.process(48000.0,subFrequency(5)); assert(std::isfinite(s)); assert(std::abs(s)<1.0); peak=std::max(peak,std::abs(s));}

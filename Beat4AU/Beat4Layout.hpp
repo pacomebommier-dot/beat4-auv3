@@ -4,8 +4,12 @@
 #include <cmath>
 namespace beat4 {
 struct Rect {double x=0,y=0,w=0,h=0;};
+inline Rect hitRect(Rect visual,double minimum=44.0) noexcept {
+    const double w=std::max(minimum,visual.w), h=std::max(minimum,visual.h);
+    return {visual.x-(w-visual.w)*.5,visual.y-(h-visual.h)*.5,w,h};
+}
 struct Layout {
-    Rect logo, host, pg, bars, kick, subLabel, subValue, levelLabel, levelSlider;
+    Rect logo, host, diagnostics, pg, bars, kick, subLabel, subValue, levelLabel, levelSlider;
     Rect song, bpm, play, pause, stop;
     bool transportsInHeader = false;
 };
@@ -18,10 +22,11 @@ inline Layout layoutFor(double W, double H) noexcept {
     const double headerY = compact ? 7.0 : std::max(12.0,H*0.028);
     l.logo = {pad,headerY,narrow?W*.40:W*.30,28};
     l.host = compact ? Rect{W*.48,headerY+6,W*.17,15} : Rect{W*.65,headerY+6,W*.15,18};
+    l.diagnostics = {pad,headerY+31,W-2*pad,compact?10.0:14.0};
     l.transportsInHeader=compact;
     if(compact){
-        const double buttonWidth=std::clamp(W*.065,23.0,33.0);
-        const double dx=std::clamp(W*.032,8.0,16.0);
+        const double buttonWidth=36.0;
+        const double dx=8.0;
         const double x=W-pad-(buttonWidth*3+dx*2);
         l.play={x,headerY,buttonWidth,30};
         l.pause={x+buttonWidth+dx,headerY,buttonWidth,30};
@@ -29,7 +34,7 @@ inline Layout layoutFor(double W, double H) noexcept {
     } else {
         l.pg={W*.84,headerY+6,W*.16-pad,18};
     }
-    const double barsY=compact?43.0:std::max(60.0,H*.145);
+    const double barsY=compact?49.0:std::max(60.0,H*.145);
     const double reserve=compact?97.0:(narrow?150.0:143.0);
     const double barsH=std::max(24.0,std::min(H*.66,H-barsY-reserve));
     const double barSide=std::max(10.0,W*.069);
