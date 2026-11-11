@@ -55,4 +55,3 @@ jobs:
           name: BEAT4-V0-5-3-TRANSPORT-BPM-UNSIGNED-IPA
           path: BEAT4_V0_5_3_TRANSPORT_BPM_UNSIGNED.ipa
           if-no-files-found: error
-274e8e7 Trigger BEAT4 0.5.3 iOS verification
