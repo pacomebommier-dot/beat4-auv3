@@ -29,7 +29,7 @@ jobs:
           BEAT4_SANITIZE: '1'
         run: bash Tests/run.sh
   ios-source-build:
-    runs-on: macos-15
+    runs-on: macos-15-intel
     needs: core-tests
     steps:
       - uses: actions/checkout@v4
