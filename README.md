@@ -1,3 +1,10 @@
+# Latest candidate: V0.5.6 — selected iPhone envelope, relative to BPM
+
+Attack 2% of a host beat, release 58%, cubic smoothstep matching the approved browser prototype at 120 BPM (10/290 ms). STOP and the non-held bars on PAUSE fade over 10% of a beat (50 ms at 120 BPM). Active PAUSE energy stays frozen. MIDI routing, audio and song memory retain their behavior.
+
+Contract and iPad recipe: `docs/v056/CONTRAT_PLAN_RECETTE.md`.
+Run `bash Tools/verify_v056.sh`. Historical version notes follow.
+
 # Latest candidate: V0.5.5 beat peak correction
 
 The active bar is now at maximum **on its own host beat**, then releases.

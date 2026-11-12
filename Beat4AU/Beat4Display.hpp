@@ -32,14 +32,21 @@ inline double beatRise(double fraction) noexcept {
     return std::pow(fraction,1.5);
 }
 
+// User-selected prototype at 120 BPM: attack 10 ms, release 290 ms.
+// These are fractions of a quarter-note, so the shape follows host BPM.
+constexpr double kLightAttackBeats = .02;
+constexpr double kLightReleaseBeats = .58;
+constexpr double kLightStopReleaseBeats = .10;
+inline double lightSmooth(double x) noexcept {
+    x=std::clamp(x,0.0,1.0);
+    return x*x*(3.0-2.0*x);
+}
 inline double barBrightness(int cell,int active,double fraction) noexcept {
-    // The active cell peaks at fraction zero and releases afterwards.
-    // The upcoming cell rises before its own beat and reaches the same peak
-    // at the boundary, when it becomes active.
     if(cell<0 || cell>3 || active<0 || active>3 ||
        !(fraction>=0.0 && fraction<=1.0))return 0.0;
-    if(cell==active)return beatRise(1.0-fraction);
-    if(cell==(active+1)%4)return beatRise(fraction);
+    if(cell==active)return 1.0-lightSmooth(fraction/kLightReleaseBeats);
+    if(cell==(active+1)%4)
+        return lightSmooth((fraction-(1.0-kLightAttackBeats))/kLightAttackBeats);
     return 0.0;
 }
 

@@ -50,7 +50,8 @@ static NSString *MMCName(int command){
     const bool rewound=[snapshot[@"mode"] intValue]==static_cast<int>(beat4::HostMode::Rewound);
     const bool stopped=[snapshot[@"localCommand"] intValue]==1 || rewound;
     const double displayBeat=[snapshot[@"displayBeat"] doubleValue];
-    _lights.update(displayBeat,moving,[snapshot[@"synced"] boolValue],stopped,dt);
+    _lights.update(displayBeat,moving,[snapshot[@"synced"] boolValue],stopped,dt,
+                   [snapshot[@"bpm"] doubleValue]);
     _snapshot=[snapshot copy];[self setNeedsDisplay];
 }
 - (BOOL)lightsAnimating {return _lights.animating();}
