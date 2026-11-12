@@ -50,6 +50,17 @@ jobs:
           cp -a "$RUNNER_TEMP/Beat4DerivedData/Build/Products/Release-iphoneos/BEAT4.app" "$RUNNER_TEMP/Payload/"
           cd "$RUNNER_TEMP"
           zip -qry "$GITHUB_WORKSPACE/BEAT4_V0_5_6_RELATIVE_LIGHTS_UNSIGNED.ipa" Payload
+      - name: Verify app and extension versions in the packaged IPA
+        run: |
+          python3 - <<'PYCODE'
+          import plistlib, zipfile
+          with zipfile.ZipFile("BEAT4_V0_5_6_RELATIVE_LIGHTS_UNSIGNED.ipa") as package:
+              for path in ("Payload/BEAT4.app/Info.plist", "Payload/BEAT4.app/PlugIns/Beat4AU.appex/Info.plist"):
+                  info = plistlib.loads(package.read(path))
+                  assert info["CFBundleShortVersionString"] == "0.5.6", (path, info)
+                  assert info["CFBundleVersion"] == "6", (path, info)
+          print("IPA version verification PASS: app and extension 0.5.6, build 6")
+          PYCODE
       - uses: actions/upload-artifact@v4
         with:
           name: BEAT4-V0-5-6-RELATIVE-LIGHTS-UNSIGNED-IPA
