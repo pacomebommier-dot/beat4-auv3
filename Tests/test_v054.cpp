@@ -34,20 +34,31 @@ int main(){
     lights.update(0,false,true,true,.15);
     assert(lights.energy(3)==0 && !lights.animating());
     lights.update(0,true,true,false,0);
-    assert(lights.energy(3)==0); // wait its turn after STOP
+    assert(lights.energy(3)==0 && lights.energy(0)==1); // immediate peak, no last-bar ghost
     lights.update(.9,true,true,false,.1);
     lights.update(1.0,true,true,false,.1);
-    assert(lights.energy(0)==1); // normal continuous handoff
+    assert(lights.energy(1)==1 && lights.energy(0)==0); // next beat peaks on its own bar
     lights.update(1.25,true,true,false,.1);
-    const double held=lights.energy(1), tail=lights.energy(0);
+    const double held=lights.energy(1), tail=lights.energy(2);
     lights.update(1.25,false,true,false,0);
     lights.update(1.25,false,true,false,.15);
-    assert(lights.energy(1)==held && lights.energy(0)>0 && lights.energy(0)<tail);
+    assert(lights.energy(1)==held && lights.energy(2)>0 && lights.energy(2)<tail);
     lights.update(1.25,false,true,false,.15);
-    assert(lights.energy(0)==0 && lights.energy(1)==held);
+    assert(lights.energy(2)==0 && lights.energy(1)==held);
     lights.update(1.25,true,true,false,0);
-    assert(lights.energy(0)==0); // no ghost on resume
+    assert(lights.energy(0)==0); // previous bar stays dark on resume
 
+    // Every bar's local maximum must be on its host beat, including wrap.
+    for(int n=-4;n<12;++n){
+        beat4::Lights sequence;
+        const int cell=(n%4+4)%4;
+        sequence.update(n-.001,true,true,false,0);
+        const double before=sequence.energy(cell);
+        sequence.update(n,true,true,false,.001);
+        assert(sequence.energy(cell)==1 && sequence.energy(cell)>before);
+        sequence.update(n+.001,true,true,false,.001);
+        assert(sequence.energy(cell)<1);
+    }
     for(double sr:{44100.,48000.,96000.}){
         beat4::AudioGain gain;
         double previous=0;

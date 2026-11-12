@@ -33,12 +33,13 @@ inline double beatRise(double fraction) noexcept {
 }
 
 inline double barBrightness(int cell,int active,double fraction) noexcept {
-    // At a beat boundary the former active cell becomes the previous cell at
-    // full energy, while the new active cell starts from zero: no visible cut.
+    // The active cell peaks at fraction zero and releases afterwards.
+    // The upcoming cell rises before its own beat and reaches the same peak
+    // at the boundary, when it becomes active.
     if(cell<0 || cell>3 || active<0 || active>3 ||
        !(fraction>=0.0 && fraction<=1.0))return 0.0;
-    if(cell==active)return beatRise(fraction);
-    if(cell==(active+3)%4)return beatRise(1.0-fraction);
+    if(cell==active)return beatRise(1.0-fraction);
+    if(cell==(active+1)%4)return beatRise(fraction);
     return 0.0;
 }
 

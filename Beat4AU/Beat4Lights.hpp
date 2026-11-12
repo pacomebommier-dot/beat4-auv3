@@ -10,11 +10,9 @@ public:
         if(play){
             const auto step=static_cast<long long>(std::floor(beat));
             const int active=static_cast<int>((step%4+4)%4);
-            if(!playing_ || step<previousStep_ || step>previousStep_+1)previousEligible_=false;
-            else if(step==previousStep_+1)previousEligible_=true;
             const double fraction=beat-std::floor(beat);
-            for(int i=0;i<4;++i)energy_[i]=(i==(active+3)%4&&!previousEligible_)?0:barBrightness(i,active,fraction);
-            active_=active;previousStep_=step;playing_=true;stopping_=false;elapsed_=0;
+            for(int i=0;i<4;++i)energy_[i]=barBrightness(i,active,fraction);
+            active_=active;playing_=true;stopping_=false;elapsed_=0;
             return;
         }
         const bool releaseAll=stop||!synced;
@@ -36,9 +34,8 @@ public:
     }
 private:
     std::array<double,4> energy_{},from_{};
-    long long previousStep_=0;
     int active_=0,hold_=-1;
-    bool playing_=false,stopping_=false,previousEligible_=false;
+    bool playing_=false,stopping_=false;
     double elapsed_=.3;
 };
 }

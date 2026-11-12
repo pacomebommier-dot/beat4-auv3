@@ -1,3 +1,12 @@
+# Latest candidate: V0.5.5 beat peak correction
+
+The active bar is now at maximum **on its own host beat**, then releases.
+The upcoming bar rises during the preceding beat and peaks at its own boundary.
+START at zero immediately shows the first peak; the previous/fourth bar stays dark.
+STOP release, PAUSE hold, CC/MMC selection, audio and song memory retain V0.5.4 behavior.
+Contract and device recipe: `docs/v055/CONTRAT_RECETTE.md`.
+Run `bash Tools/verify_v055.sh`. Historical notes below describe prior versions.
+
 # BEAT//4 — AUv3 for AUM
 
 **Source milestone V0.5 (2026-11-10): portable tests + ASan/UBSan PASS; native iOS build and AUM routing still unverified.**

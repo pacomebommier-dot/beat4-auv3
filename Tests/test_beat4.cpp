@@ -21,18 +21,22 @@ int main() {
     assert(beat4::canvasShouldRedraw(false,false,true));
     assert(beat4::canvasShouldRedraw(true,false,false));
 
-    // V0.5.3: the active bar rises for one full beat while the previous bar
-    // fades with the exact time-reversed curve over that same beat.
+    // V0.5.5: the beat is the peak, not the beginning of the rise.
     assert(beat4::beatRise(0.0)==0.0);
     assert(beat4::beatRise(1.0)==1.0);
-    assert(beat4::beatRise(.25)<beat4::beatRise(.50));
-    assert(beat4::beatRise(.50)<beat4::beatRise(.75));
-    for(int step=0;step<=20;++step){
-        const double f=step/20.0;
-        assert(std::abs(beat4::barBrightness(1,1,f)-beat4::beatRise(f))<1e-12);
-        assert(std::abs(beat4::barBrightness(0,1,f)-beat4::beatRise(1.0-f))<1e-12);
-        assert(beat4::barBrightness(2,1,f)==0.0);
-        assert(beat4::barBrightness(3,1,f)==0.0);
+    for(int active=0;active<4;++active){
+        assert(beat4::barBrightness(active,active,0)==1.0);
+        for(int step=0;step<=20;++step){
+            const double f=step/20.0;
+            assert(std::abs(beat4::barBrightness(active,active,f)-beat4::beatRise(1-f))<1e-12);
+            assert(std::abs(beat4::barBrightness((active+1)%4,active,f)-beat4::beatRise(f))<1e-12);
+            assert(beat4::barBrightness((active+2)%4,active,f)==0);
+            assert(beat4::barBrightness((active+3)%4,active,f)==0);
+        }
+        // The same bar reaches its peak before the boundary and stays at its
+        // peak as it becomes active: no delayed maximum, no discontinuity.
+        const int next=(active+1)%4;
+        assert(beat4::barBrightness(next,active,1)==beat4::barBrightness(next,next,0));
     }
     assert(beat4::barBrightness(0,0,-.01)==0.0);
     assert(beat4::barBrightness(0,0,1.01)==0.0);
