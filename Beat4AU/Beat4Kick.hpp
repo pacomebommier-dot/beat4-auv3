@@ -17,9 +17,10 @@ class KickVoice {
 public:
     void reset() noexcept {
         age_ = 1.0; bodyPhase_ = transientPhase_ = 0;
-        hp_ = previous_ = 0;
+        hp_ = previous_ = lastOutput_ = retriggerTail_ = 0;
     }
     void trigger() noexcept {
+        retriggerTail_ = lastOutput_;
         age_ = 0; bodyPhase_ = transientPhase_ = 0;
         hp_ = previous_ = 0;
     }
@@ -43,14 +44,19 @@ public:
         // adding a sharp, click-like sample. Final DC block protects the mix.
         const double punch = 0.07 * (std::exp(-t/0.005) - std::exp(-t/0.0015));
         const double drive = 0.70 * std::tanh((body + attack + punch) * 1.36);
-        const double out = drive - previous_ + 0.9978 * hp_;
+        double out = drive - previous_ + 0.9978 * hp_;
         previous_ = drive;
         hp_ = out;
+        // Blend a still-ringing voice into the new attack over 5 ms.
+        if(t<.005){const double x=t/.005;out+=retriggerTail_*(1-x)*(1-x);}
+        // Reach actual zero before the hard lifetime boundary.
+        if(t>.730){const double x=std::clamp((.750-t)/.020,0.,1.);out*=x*x*(3-2*x);}
         age_ += 1.0 / sampleRate;
+        lastOutput_=out;
         return out;
     }
 private:
     double bodyPhase_ = 0, transientPhase_ = 0;
-    double age_ = 1, hp_ = 0, previous_ = 0;
+    double age_ = 1, hp_ = 0, previous_ = 0, lastOutput_ = 0, retriggerTail_ = 0;
 };
 }

@@ -96,3 +96,17 @@ See `docs/RECETTE_AUM_V05.md` for the step-by-step check. A `Tools/render_kick.c
 - Extended test suite for beat seam, sample rates 44.1/48/96 kHz and multiple buffer sizes, and 8 responsive viewports; ASan/UBSan pass.
 - Native GitHub Actions job builds the unsigned app and extension once the project is pushed to a **new independent repository**. The connected GitHub tool does not offer creating that repository; the existing XONE repo is intentionally untouched.
 
+
+## V0.5.4 correction candidate
+
+See `docs/v054/00_INDEX.md` for contracts and on-device acceptance. In this candidate,
+START/STOP default to a learnable CC safety mode: MIDI channel 16, CC110 START,
+CC111 STOP, value 127 then 0. Route AUM Control to MIDI Control, learn Start Play
+and Stop/Rewind, trigger only on the high value and save the AUM session. Long-press
+START to choose CC or MMC. The two modes are exclusive for START/STOP; PAUSE always
+uses MMC, with Receive MMC enabled. Selecting CC does not bypass a missing MIDI
+output callback or a non-rendering audio graph. No simultaneous double transport.
+
+`bash Tools/verify_v054.sh` runs portable tests, sanitizers, plist validation and,
+on macOS with Xcode, the unsigned native build. Passing C++ tests does not certify
+iPad/AUM operation. All prior IPA files remain unchanged.

@@ -15,7 +15,7 @@ int main() {
     assert(beat4::mmcGoalReached(0x09,false,false));
     assert(!beat4::mmcGoalReached(0x09,true,false));
     assert(beat4::mmcGoalReached(0x01,false,true));
-    assert(!beat4::mmcGoalReached(0x01,false,false));
+    assert(beat4::mmcGoalReached(0x01,false,false)); // STOP must not require rewind
     assert(beat4::mmcGoalReached(0x05,false,true));
     assert(!beat4::mmcGoalReached(0x05,false,false));
     assert(beat4::mmcShouldAttempt(0x02,false,true,0,0));
@@ -23,7 +23,7 @@ int main() {
     assert(!beat4::mmcShouldAttempt(0x02,false,false,0,0));
     assert(!beat4::mmcShouldAttempt(0x02,false,true,3,0));
     assert(!beat4::mmcShouldAttempt(0x02,false,true,1,2));
-    assert(beat4::mmcRetryFrameGap(48000.0)==2400);
+    assert(beat4::mmcRetryFrameGap(48000.0)==12000);
     assert(beat4::mmcCooldownAfterFrames(2400,32)==2368);
     assert(beat4::mmcCooldownAfterFrames(2400,4096)==0);
     const auto delivery=beat4::mmcPackDelivery(7,0x02,1,2400,false);
@@ -48,10 +48,10 @@ int main() {
     assert(!beat4::mmcDeliveryFailed(accepted1));
     assert(beat4::mmcDeliveryCommand(accepted1)==0x02);
     assert(beat4::mmcDeliveryAttempts(accepted1)==1);
-    assert(beat4::mmcDeliveryCooldown(accepted1)==2400);
+    assert(beat4::mmcDeliveryCooldown(accepted1)==12000);
     decision=beat4::mmcRenderDecision(accepted1,false,true,512);
     assert(decision.action==beat4::MMCAction::None);
-    assert(beat4::mmcDeliveryCooldown(decision.nextWord)==1888);
+    assert(beat4::mmcDeliveryCooldown(decision.nextWord)==11488);
 
     decision=beat4::mmcRenderDecision(decision.nextWord,true,true,512);
     assert(decision.action==beat4::MMCAction::Acknowledge);
@@ -89,6 +89,10 @@ int main() {
     assert(beat4::validMMCCommand(0x09));
     assert(!beat4::validMMCCommand(0x03));
 
+    // An accepted STOP may not be repeated when host readback is missing.
+    const auto stopSent=beat4::mmcAfterSend(beat4::mmcPackDelivery(11,1,0,0,false),0,48000);
+    auto stopWait=beat4::mmcRenderDecision(stopSent,false,true,12000);
+    assert(stopWait.action==beat4::MMCAction::FailNoAck);
     HostMemory h;
     // Initial unloaded/idle host is READY, not a proven STOP.
     assert(h.observe(frame(false, 0, 0)) == HostMode::ReadyAtZero);

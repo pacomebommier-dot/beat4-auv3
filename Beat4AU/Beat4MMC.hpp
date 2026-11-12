@@ -14,7 +14,7 @@ inline bool hostCallbacksMustRefresh(bool resourcesChanged,bool requestStarted,
 
 inline int mmcRetryFrameGap(double sampleRate) noexcept {
     if (!(sampleRate > 0) || !std::isfinite(sampleRate)) return 1;
-    return std::max(1,static_cast<int>(std::lround(sampleRate*.050)));
+    return std::max(1,static_cast<int>(std::lround(sampleRate*.250)));
 }
 
 inline int mmcCooldownAfterFrames(int remaining,std::uint32_t renderedFrames) noexcept {
@@ -57,7 +57,7 @@ inline MMCDecision mmcRenderDecision(std::uint64_t word,bool goalReached,
         word=mmcPackDelivery(generation,command,attempts,cooldown,false);
         if(cooldown>0)return {word,MMCAction::None};
     }
-    if(attempts>=kMMCAttemptLimit)
+    if(attempts>=kMMCAttemptLimit || (command==0x01 && attempts>=1))
         return {mmcPackDelivery(generation,0,attempts,0,true),MMCAction::FailNoAck};
     return {word,midiAvailable?MMCAction::Send:MMCAction::None};
 }
@@ -74,7 +74,7 @@ inline std::uint64_t mmcAfterSend(std::uint64_t word,int callbackStatus,
 inline bool mmcGoalReached(int command, bool moving, bool atOrigin) noexcept {
     if (command == 0x02) return moving;                 // PLAY
     if (command == 0x09) return !moving;                // PAUSE
-    if (command == 0x01) return !moving && atOrigin;    // STOP + rewind
+    if (command == 0x01) return !moving;                // STOP; rewind belongs to AUM policy
     if (command == 0x05) return atOrigin;               // REWIND
     return false;
 }

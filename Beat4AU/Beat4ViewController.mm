@@ -8,6 +8,8 @@
 #include "Beat4Songs.hpp"
 #include "Beat4Layout.hpp"
 #include "Beat4Display.hpp"
+#include "Beat4Lights.hpp"
+#include "Beat4Transport.hpp"
 #include "Beat4BPMGesture.hpp"
 
 static UIColor *RGB(CGFloat r,CGFloat g,CGFloat b,CGFloat a=1){
@@ -32,20 +34,28 @@ static NSString *MMCName(int command){
     return CGRectContainsPoint(CGRectInset(self.bounds,-dx,-dy),point);
 }
 @end
-@interface Beat4Canvas : UIView
+@interface Beat4Canvas : UIView {
+    beat4::Lights _lights;
+    CFTimeInterval _lightTick;
+}
+- (BOOL)lightsAnimating;
 @property(nonatomic,copy)NSDictionary<NSString*,NSNumber*> *snapshot;
 @property(nonatomic,assign)CGRect lightBounds;
 @end
 @implementation Beat4Canvas
 - (void)setSnapshot:(NSDictionary<NSString*,NSNumber*>*)snapshot {
+    const CFTimeInterval now=CACurrentMediaTime();
+    const double dt=_lightTick>0?now-_lightTick:0;_lightTick=now;
+    const bool moving=[snapshot[@"moving"] boolValue];
+    const bool rewound=[snapshot[@"mode"] intValue]==static_cast<int>(beat4::HostMode::Rewound);
+    const bool stopped=[snapshot[@"localCommand"] intValue]==1 || rewound;
+    const double displayBeat=[snapshot[@"displayBeat"] doubleValue];
+    _lights.update(displayBeat,moving,[snapshot[@"synced"] boolValue],stopped,dt);
     _snapshot=[snapshot copy];[self setNeedsDisplay];
 }
+- (BOOL)lightsAnimating {return _lights.animating();}
 - (void)drawRect:(CGRect)rect {
     [[UIColor colorWithRed:.028 green:.035 blue:.030 alpha:1] setFill]; UIRectFill(rect);
-    const BOOL synced=[self.snapshot[@"synced"] boolValue];
-    const BOOL moving=[self.snapshot[@"moving"] boolValue];
-    const int active=[self.snapshot[@"active"] intValue];
-    const double fraction=[self.snapshot[@"fraction"] doubleValue];
     const CGRect area=self.lightBounds;
     const CGFloat gap=static_cast<CGFloat>(beat4::beatBarGap(area.size.width));
     const CGFloat bw=(area.size.width-3*gap)/4;
@@ -53,8 +63,7 @@ static NSString *MMCName(int command){
     if(!ctx || bw<=0)return;
     for(int i=0;i<4;++i){
         CGRect r=CGRectMake(CGRectGetMinX(area)+i*(bw+gap),CGRectGetMinY(area),bw,CGRectGetHeight(area));
-        const CGFloat energy=(synced&&moving)
-            ? static_cast<CGFloat>(beat4::barBrightness(i,active,fraction)) : 0;
+        const CGFloat energy=static_cast<CGFloat>(_lights.energy(i));
         const CGFloat corner=std::max((CGFloat)3,std::min((CGFloat)7,bw*.10));
         UIBezierPath *shape=[UIBezierPath bezierPathWithRoundedRect:r cornerRadius:corner];
         // The physical segment remains visible at rest, with no animated core.
@@ -172,7 +181,26 @@ static NSString *MMCName(int command){
     [_playButton addTarget:self action:@selector(play:) forControlEvents:UIControlEventTouchUpInside];
     [_pauseButton addTarget:self action:@selector(pause:) forControlEvents:UIControlEventTouchUpInside];
     [_stopButton addTarget:self action:@selector(stop:) forControlEvents:UIControlEventTouchUpInside];
+    _playButton.accessibilityLabel=@"Start transport";
+    _playButton.accessibilityHint=@"Appui long pour choisir MIDI CC ou MMC";
+    [self configureTransportMenu];
     [self refreshSong];
+}
+- (void)configureTransportMenu {
+    const BOOL cc=[self.unit safetyMIDIEnabled];
+    __weak Beat4ViewController *weakSelf=self;
+    UIAction *safe=[UIAction actionWithTitle:@"Secours MIDI CC — START/STOP" image:nil identifier:nil handler:^(__kindof UIAction *action){
+        (void)action;[weakSelf.unit setSafetyMIDIEnabled:YES];[weakSelf configureTransportMenu];
+    }];
+    safe.state=cc?UIMenuElementStateOn:UIMenuElementStateOff;
+    UIAction *mmc=[UIAction actionWithTitle:@"MMC — START/PAUSE/STOP" image:nil identifier:nil handler:^(__kindof UIAction *action){
+        (void)action;[weakSelf.unit setSafetyMIDIEnabled:NO];[weakSelf configureTransportMenu];
+    }];
+    mmc.state=cc?UIMenuElementStateOff:UIMenuElementStateOn;
+    _playButton.menu=[UIMenu menuWithTitle:@"Transport AUM" children:@[safe,mmc]];
+    _playButton.showsMenuAsPrimaryAction=NO;
+    [_playButton setTitle:cc?@"▶ CC":@"▶ MMC" forState:UIControlStateNormal];
+    _playButton.titleLabel.font=Mono(11,UIFontWeightMedium);
 }
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
@@ -307,7 +335,7 @@ static NSString *MMCName(int command){
     const uint64_t revision=[self.unit displayRevision];
     const BOOL revisionChanged=revision!=self.seenRevision;
     const BOOL watchdogDue=self.lastWatchdog==0 || link.timestamp-self.lastWatchdog>=1.0;
-    const auto decision=beat4::displayDecision(self.lastMoving,revisionChanged,watchdogDue);
+    const auto decision=beat4::displayDecision(self.lastMoving||[self.canvas lightsAnimating],revisionChanged,watchdogDue);
     if(!decision.readSnapshot)return;
     if(watchdogDue)self.lastWatchdog=link.timestamp;
     NSDictionary *data=[self.unit transportSnapshot];
@@ -317,7 +345,7 @@ static NSString *MMCName(int command){
     BOOL moving=[data[@"moving"] boolValue];
     const BOOL canvasChanged=beat4::canvasShouldRedraw(moving,
         synced!=self.lastSynced,moving!=self.lastMoving);
-    if(canvasChanged)self.canvas.snapshot=data;
+    if(canvasChanged || revisionChanged || [self.canvas lightsAnimating])self.canvas.snapshot=data;
     NSString *host=synced?[NSString stringWithFormat:@"AUM %.1f %@",[data[@"bpm"] doubleValue],moving?@"▶":@"Ⅱ"] : (![data[@"hasRender"] boolValue]?@"AUM NO RENDER":@"AUM NO HOST");
     if(![_host.text isEqualToString:host])_host.text=host;
     NSString *render=[data[@"hasRender"] boolValue]?@"RENDER OK":@"RENDER STALE";
@@ -334,6 +362,11 @@ static NSString *MMCName(int command){
         mmc=status==noErr?@"MMC NO ACK":[NSString stringWithFormat:@"MMC SEND %d",status];
     }else if(acknowledged)mmc=[NSString stringWithFormat:@"MMC ACK %@",MMCName(acknowledged)];
     else mmc=@"MMC READY";
+    if([data[@"safetyEnabled"] boolValue]){
+        const int cc=[data[@"safetyLastCC"] intValue];
+        mmc=[NSString stringWithFormat:@"CC%d #%llu status %d | %@",cc,
+            [data[@"safetyAttempts"] unsignedLongLongValue],[data[@"safetyLastStatus"] intValue],mmc];
+    }
     NSString *diagnostics=[NSString stringWithFormat:@"%@ | %@ | %@ | %@ | BPM %.1f | %@",
         render,transport,musical,moving?@"PLAY":@"STOP",[data[@"bpm"] doubleValue],mmc];
     if(![_diagnostics.text isEqualToString:diagnostics])_diagnostics.text=diagnostics;

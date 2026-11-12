@@ -6,6 +6,8 @@ NS_ASSUME_NONNULL_BEGIN
 // Main-thread API. MIDI/render callback reads only realtime-safe atomics.
 - (NSDictionary<NSString *, NSNumber *> *)transportSnapshot;
 - (uint64_t)displayRevision;
+- (BOOL)safetyMIDIEnabled;
+- (void)setSafetyMIDIEnabled:(BOOL)enabled;
 - (NSInteger)currentProgram;
 - (NSDictionary<NSString *, id> *)currentSong;
 - (void)saveSongTitle:(NSString *)title;
