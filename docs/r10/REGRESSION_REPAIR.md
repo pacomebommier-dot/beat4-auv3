@@ -14,3 +14,6 @@ Independent review: 3 important lifecycle/gesture/freshness issues fixed; native
 Ruling: 44pt guarantee concerns original transport target; exact 8-column R02/R10 grid cannot offer nonoverlapping 44pt squares on every narrow viewport without violating contracted geometry. Keep grid geometry. MODE/slider retain reference geometry; hardware ergonomics still requires device review.
 Minor reallocation coverage strengthened: render block acquired before first 48k allocation, retained across 44.1k allocation.
 ASan/UBSan local PASS with ASAN_OPTIONS=detect_leaks=0; LeakSanitizer unsupported under this executor ptrace. Full sanitizer CI remains enabled.
+
+R02 exact published gradient stops restored: #d9efc7 → #bbd8ad (50%) → #829e79. Logo #e4e6db.
+New geometry assertions pin compact tool typographic edge 273 and slider center267 from approved SVG. Gesture test pins ±36points→±9BPM and fallback120.

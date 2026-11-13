@@ -56,13 +56,13 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
             self.lightBounds.origin.y,layout.barWidth,self.lightBounds.size.height);
         UIBezierPath *shape=[UIBezierPath bezierPathWithRoundedRect:r cornerRadius:layout.corner];
         CGContextSaveGState(ctx);
-        if(energy>.001)CGContextSetShadowWithColor(ctx,CGSizeZero,12*layout.scale,
+        if(energy>.001)CGContextSetShadowWithColor(ctx,CGSizeZero,16*layout.scale,
             RGB(151,185,139,.35*energy).CGColor);
         [RGB(24,34,26) setFill];[shape fill];CGContextRestoreGState(ctx);
         if(energy>.001){
             // V2/R02 vertical phosphor gradient; energy comes exclusively from host-beat envelope.
-            const CGFloat colors[]={.75,.86,.65,energy, .70,.82,.62,energy, .50,.63,.46,energy};
-            const CGFloat stops[]={0,.52,1};CGColorSpaceRef space=CGColorSpaceCreateDeviceRGB();
+            const CGFloat colors[]={217./255,239./255,199./255,energy, 187./255,216./255,173./255,energy, 130./255,158./255,121./255,energy};
+            const CGFloat stops[]={0,.5,1};CGColorSpaceRef space=CGColorSpaceCreateDeviceRGB();
             CGGradientRef gradient=CGGradientCreateWithColorComponents(space,colors,stops,3);
             CGContextSaveGState(ctx);[shape addClip];
             CGContextDrawLinearGradient(ctx,gradient,CGPointMake(CGRectGetMidX(r),CGRectGetMinY(r)),
@@ -119,7 +119,7 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     canvas.backgroundColor=RGB(7,9,8);self.canvas=canvas;self.view=canvas;
     self.preferredContentSize=CGSizeMake(720,400);
     self.seenPG=-999;self.editedPC=0;self.canvas.showBars=YES;
-    _logo=[self makeLabel:@"BEAT//4" size:20 color:RGB(220,224,212)];
+    _logo=[self makeLabel:@"BEAT//4" size:20 color:RGB(228,230,219)];
     _logo.font=Mono(20,UIFontWeightSemibold);
     _versionLabel=[self makeLabel:[NSString stringWithFormat:@"v%@",[NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"0.5.8"] size:8 color:RGB(122,145,121)];
     _modeLabel=[self makeLabel:@"TEMPO MODE" size:10 color:RGB(197,208,197)];
