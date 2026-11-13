@@ -134,7 +134,7 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     _bpmButton.accessibilityHint=@"Glisser horizontalement pour régler le BPM entier, un BPM par 9 points";
     _playButton=[self makeButton:@"▶" size:20];
     [_playButton addTarget:self action:@selector(toggleTransport:) forControlEvents:UIControlEventTouchUpInside];
-    _playButton.accessibilityLabel=@"AUM PLAY/STOP (MIDI Learn CC119)";
+    _playButton.accessibilityLabel=@"AUM PLAY/STOP (CC110/111 canal 16)";
     _pageRegion=[UIView new];[self.view addSubview:_pageRegion];
     for(NSNumber *direction in @[@(UISwipeGestureRecognizerDirectionLeft),@(UISwipeGestureRecognizerDirectionRight)]){
         UISwipeGestureRecognizer *swipe=[[UISwipeGestureRecognizer alloc]initWithTarget:self action:@selector(swipePage:)];

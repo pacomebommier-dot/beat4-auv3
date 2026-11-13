@@ -18,7 +18,7 @@ BPM entier mémorisé par glissement, sans effet immédiat sur AUM. SAVE ne mém
 
 - Circuit canal 16 → entrée BEAT//4.
 - Sortie **Circuit Projects** → Circuit uniquement : PC 0–63 émis à la frontière calculée pour éviter une seconde queue native.
-- Sortie **AUM Control** → MIDI Control AUM uniquement : pitch bend canal 15, plage BPM 20–240 ; toggle transport proposé par CC119 canal 15, front montant de l’impulsion 127/0 à apprendre explicitement.
+- Sortie **AUM Control** → MIDI Control AUM uniquement : pitch bend canal 15, plage BPM 20–240 ; transport conservé de V0.5.6 : CC110 PLAY et CC111 STOP sur canal 16, impulsion 127 puis 0 au buffer suivant.
 - AUM maître de la position, du tempo et du transport. Aucun message de commande transport émis par un rappel PC.
 
 La réception exacte du mapping tempo/transport, la phase Drum 1 et le comportement matériel des valeurs queued doivent être vérifiés avant usage scène. Le scheduling est actuellement à résolution du buffer audio. Voir [audit, recette T01–T16 et limites](docs/r10/AUDIT_ET_RECETTE.md).

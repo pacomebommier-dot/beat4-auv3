@@ -32,6 +32,7 @@ struct State {
     std::array<std::atomic<int>,128> queues, pcModes;
     std::atomic<int> globalMode{0}, localPC{-1}, selectedPC{-1}, transportRequest{-1};
     std::atomic<bool> uncertain{false},estimated{false};
+    beat4::TransportPulse transportPulse;
     beat4::Journal journal;
     beat4::ProgramEngine engine; // render thread owns this state
     beat4::ProgramMemory memories;
@@ -240,10 +241,10 @@ Snapshot load(const State& s) noexcept {
         if(s->engine.selected!=s->selectedPC.load() || s->engine.uncertain!=s->uncertain.load())
             s->journal.write(s->engine.uncertain?5:7,s->engine.selected,local>=0?1:0,beat);
         const int request=s->transportRequest.exchange(-1);
-        if(request>=0 && midiOut){
-            // Explicit MIDI Learn mapping required in AUM: ch15 CC119 -> transport toggle.
-            uint8_t bytes[3]={0xBE,119,127};midiOut(sampleTime,0,3,bytes);
-            bytes[2]=0;midiOut(sampleTime,0,3,bytes);
+        if(request>=0)s->transportPulse.request(moving);
+        if(midiOut){
+            const auto message=s->transportPulse.next();
+            if(message.length)midiOut(sampleTime,message.cable,message.length,message.bytes.data());
         }
         const bool canPlay=moving && musicalOK && sampleRate>0 && std::isfinite(beat) &&
                 std::isfinite(tempo) && tempo>0 && beatsPerBar==4 && denominator==4;

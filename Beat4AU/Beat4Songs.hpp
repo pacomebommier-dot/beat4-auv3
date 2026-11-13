@@ -49,4 +49,18 @@ inline MIDIMessage tempoMessage(double bpm) noexcept {
  return {0,3,{0xEE,static_cast<uint8_t>(n&127),static_cast<uint8_t>((n>>7)&127)}};
 }
 
+// Existing V0.5.6 AUM mapping: channel 16, CC110 START / CC111 STOP.
+// Preserve each release before another press, as the previous SafetyPulse did.
+class TransportPulse {
+ int pending=-1,release=-1;
+public:
+ void request(bool moving) noexcept {pending=moving?111:110;}
+ MIDIMessage next() noexcept {
+  if(release>=0){const int cc=release;release=-1;return {0,3,{0xBF,static_cast<uint8_t>(cc),0}};}
+  if(pending<0)return {};
+  const int cc=pending;pending=-1;release=cc;
+  return {0,3,{0xBF,static_cast<uint8_t>(cc),127}};
+ }
+};
+
 }

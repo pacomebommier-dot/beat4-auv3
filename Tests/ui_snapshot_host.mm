@@ -88,6 +88,12 @@
   event.MIDI.length=2;event.MIDI.data[0]=0xCF;event.MIDI.data[1]=103;input=&event;tick();
   assert(unit.currentProgram==7 && [unit.transportSnapshot[@"uncertain"] boolValue] && messages.count==1);
   event.MIDI.data[1]=39;tick();assert(unit.currentProgram==39 && messages.count==1);input=nullptr;
+  [unit requestTransportToggle];tick();tick();
+  NSArray *stopPress=@[@191,@111,@127],*stopRelease=@[@191,@111,@0];
+  assert(messages.count==3 && [messages[1][@"bytes"] isEqual:stopPress] && [messages[2][@"bytes"] isEqual:stopRelease]);
+  moving=NO;[unit requestTransportToggle];tick();tick();
+  NSArray *playPress=@[@191,@110,@127],*playRelease=@[@191,@110,@0];
+  assert(messages.count==5 && [messages[3][@"bytes"] isEqual:playPress] && [messages[4][@"bytes"] isEqual:playRelease]);
   NSData *trace=[NSJSONSerialization dataWithJSONObject:@{@"host":@"SIMULATED",@"midiOutput":messages,@"journal":unit.diagnosticLog} options:NSJSONWritingPrettyPrinted error:&error];
   assert(trace && !error && [trace writeToFile:[directory stringByAppendingPathComponent:@"mock-host-midi-trace.json"] atomically:YES]);
   [@"PASS: 12 native UIKit renders, ACTIVE/SELECTED, grid colors and AUv3 MIDI anti-echo on simulated host\n" writeToFile:[directory stringByAppendingPathComponent:@"DONE.txt"] atomically:YES encoding:NSUTF8StringEncoding error:&error];
