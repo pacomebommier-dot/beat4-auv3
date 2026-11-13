@@ -26,5 +26,10 @@ int main(){
  assert(e.advance(h,m).tempo==0); h.moving=true; h.beat=100; assert(e.advance(h,m).tempo==0);
  h.valid=false; e.request(6,true,false,h,m); assert(e.selected==6 && e.uncertain);
  h.valid=true; h.beat=104; assert(e.advance(h,m).activated<0);
+ ProgramEngine order; HostPosition held{true,false,0,0,4,128};
+ order.request(0,false,false,held,m);HostPosition boundary{true,true,1,0,4,128};
+ order.advance(boundary,m);order.request(1,true,false,boundary,m);boundary.beat=4;boundary.barStart=4;
+ auto actions=order.renderStep(boundary,m,2);assert(actions[0].activated<0 && actions[1].activated<0 && order.selected==2 && order.active==0);
+ assert(shouldEmitTempo({5,false,140},140));assert(!shouldEmitTempo({-1,false,140},140));
  std::cout<<"R10 PC/queue/tempo state machine PASS\n";
 }

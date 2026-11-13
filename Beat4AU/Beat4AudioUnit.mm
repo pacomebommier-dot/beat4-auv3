@@ -11,14 +11,13 @@
 #import "Beat4Transport.hpp"
 #import "Beat4Songs.hpp"
 #import "Beat4Program.hpp"
+#import "Beat4Journal.hpp"
 #import "Beat4Kick.hpp"
 #import "Beat4BeatGate.hpp"
 
 namespace {
 constexpr AUParameterAddress kLevel = 0;
 constexpr AUParameterAddress kEnabled = 1;
-constexpr double kTempoMin = 20;
-constexpr double kTempoMax = 240;
 static NSString *const kSongStoreKey = @"beat4.songs.v2";
 struct State {
     std::atomic<uint64_t> sequence{0}, tick{0}, callbacks{0};
@@ -33,6 +32,7 @@ struct State {
     std::array<std::atomic<int>,128> queues, pcModes;
     std::atomic<int> globalMode{0}, localPC{-1}, selectedPC{-1}, transportRequest{-1};
     std::atomic<bool> uncertain{false};
+    beat4::Journal journal;
     beat4::ProgramEngine engine; // render thread owns this state
     beat4::ProgramMemory memories;
     double lastTempoSent=0;
@@ -49,7 +49,8 @@ struct HostHooks {
 struct Snapshot {
     uint64_t tick, callbacks;
     double beat, bpm, samplePosition, bufferSeconds;
-    int numerator, denominator, mode;
+    int numerator, denominator, mode, pg, selected;
+    bool uncertain;
     bool transportValid, musicalValid, moving, transportChanged;
 };
 Snapshot load(const State& s) noexcept {
@@ -61,7 +62,7 @@ Snapshot load(const State& s) noexcept {
                 s.beat.load(std::memory_order_relaxed), s.bpm.load(std::memory_order_relaxed),
                 s.samplePosition.load(std::memory_order_relaxed), s.bufferSeconds.load(std::memory_order_relaxed),
                 s.numerator.load(std::memory_order_relaxed), s.denominator.load(std::memory_order_relaxed),
-                s.mode.load(std::memory_order_relaxed), s.transportValid.load(std::memory_order_relaxed),
+                s.mode.load(std::memory_order_relaxed), s.currentPG.load(),s.selectedPC.load(),s.uncertain.load(), s.transportValid.load(std::memory_order_relaxed),
                 s.musicalValid.load(std::memory_order_relaxed), s.moving.load(std::memory_order_relaxed),
                 s.transportChanged.load(std::memory_order_relaxed)};
         const auto b=s.sequence.load(std::memory_order_acquire);
@@ -136,13 +137,13 @@ Snapshot load(const State& s) noexcept {
         NSString* title=[entry[@"title"] isKindOfClass:NSString.class] ? entry[@"title"] : @"UNKNOWN";
         double bpm=[entry[@"bpm"] doubleValue];
         NSInteger note=entry[@"sub"] ? [entry[@"sub"] integerValue] : -1;
-        _songCache[key]=@{@"title":title, @"bpm":@(beat4::validBPM(bpm)?bpm:0),
+        _songCache[key]=@{@"title":title, @"bpm":@(beat4::storedBPM(bpm)),
                          @"sub":@(beat4::validSub((int)note)?note:-1),
-                         @"queue":@([entry[@"queue"] intValue]>0?[entry[@"queue"] intValue]:0),
-                         @"pcMode":@(entry[@"pcMode"]?[entry[@"pcMode"] intValue]:-1)};
+                         @"queue":@(beat4::storedQueue([entry[@"queue"] intValue])),
+                         @"pcMode":@(beat4::storedMode(entry[@"pcMode"]?[entry[@"pcMode"] intValue]:-1))};
         s->queues[pg].store([_songCache[key][@"queue"] intValue]);
         s->pcModes[pg].store([_songCache[key][@"pcMode"] intValue]);
-        s->tempos[pg].store(beat4::validBPM(bpm)?bpm:0);
+        s->tempos[pg].store(beat4::storedBPM(bpm));
         s->notes[pg].store(beat4::validSub((int)note)?(int)note:-1);
     }];
     return self;
@@ -210,20 +211,20 @@ Snapshot load(const State& s) noexcept {
         }
         s->memories.globalMode=std::clamp(s->globalMode.load(),0,2);
         auto apply=[&](beat4::ProgramAction a){
+            if(a.activated>=0)s->journal.write(3,a.activated,a.sendPC?1:0,beat);
             if(a.sendPC && midiOut){
                 // Immediate PC at our boundary, avoiding a second native Circuit queue.
-                uint8_t bytes[2]={0xCF,static_cast<uint8_t>(a.activated)};
-                midiOut(sampleTime,1,2,bytes);
+                auto message=beat4::circuitMessage(a.activated);
+                const auto status=midiOut(sampleTime,message.cable,message.length,message.bytes.data());
+                s->journal.write(status==noErr?4:6,a.activated,1,beat);
             }
-            if(a.tempo>0 && midiOut && std::abs(a.tempo-s->lastTempoSent)>=0.01){
-                const int encoded=beat4::pitchBend14(a.tempo,kTempoMin,kTempoMax);
-                if(encoded>=0){
-                    uint8_t bytes[3]={0xEE,static_cast<uint8_t>(encoded&127),static_cast<uint8_t>((encoded>>7)&127)};
-                    midiOut(sampleTime,0,3,bytes);s->lastTempoSent=a.tempo;
+            if(midiOut && beat4::shouldEmitTempo(a,s->lastTempoSent)){
+                auto message=beat4::tempoMessage(a.tempo);
+                if(message.length){
+                    midiOut(sampleTime,message.cable,message.length,message.bytes.data());s->lastTempoSent=a.tempo;
                 }
             }
         };
-        apply(s->engine.advance(position,s->memories));
         for(const AURenderEvent *e=events;e!=nullptr;e=e->head.next){
             if(e->head.eventType==AURenderEventParameter || e->head.eventType==AURenderEventParameterRamp){
                 // AUM may schedule automation/MIDI Learn as realtime parameter events,
@@ -237,14 +238,13 @@ Snapshot load(const State& s) noexcept {
             if(e->head.eventType!=AURenderEventMIDI || e->MIDI.length<2)continue;
             int raw=-1;
             if(beat4::isCircuitProgramChange(e->MIDI.data[0],e->MIDI.data[1],raw)){
+                s->journal.write(1,raw,0,beat);
                 apply(s->engine.request(raw%64,false,raw>=64,position,s->memories));
             }
         }
         const int local=s->localPC.exchange(-1);
-        if(local>=0)apply(s->engine.request(local,true,false,position,s->memories));
-        s->currentPG.store(s->engine.active);
-        s->selectedPC.store(s->engine.selected);
-        s->uncertain.store(s->engine.uncertain);
+        if(local>=0)s->journal.write(2,local,1,beat);
+        for(auto a:s->engine.renderStep(position,s->memories,local))apply(a);
         const int request=s->transportRequest.exchange(-1);
         if(request>=0 && midiOut){
             // Explicit MIDI Learn mapping required in AUM: ch15 CC119 -> transport toggle.
@@ -255,7 +255,7 @@ Snapshot load(const State& s) noexcept {
                 std::isfinite(tempo) && tempo>0 && beatsPerBar==4 && denominator==4;
         const bool on=s->kickEnabled.load(std::memory_order_relaxed);
         const double level=static_cast<double>(s->kickLevel.load(std::memory_order_relaxed));
-        int pg=s->currentPG.load(std::memory_order_relaxed);
+        int pg=s->engine.active;
         int pitch=beat4::validProgram(pg)?s->notes[pg].load(std::memory_order_relaxed):-1;
         const double subHz=beat4::subFrequency(pitch);
         if(!canPlay || !on)voice->reset();
@@ -284,6 +284,9 @@ Snapshot load(const State& s) noexcept {
             }
         }
         s->sequence.fetch_add(1,std::memory_order_acq_rel);
+        s->currentPG.store(s->engine.active);
+        s->selectedPC.store(s->engine.selected);
+        s->uncertain.store(s->engine.uncertain);
         s->tick.store(mach_absolute_time(),std::memory_order_relaxed);
         s->beat.store(beat,std::memory_order_relaxed);
         s->bpm.store(tempo,std::memory_order_relaxed);
@@ -314,13 +317,18 @@ Snapshot load(const State& s) noexcept {
     return @{@"hasRender":@(fresh),@"synced":@(synced),@"moving":@(s.moving),
              @"mode":@(s.mode),@"active":@(d.cell),@"fraction":@(d.fractional),
              @"bpm":@(s.bpm),@"bar":@(d.bar),@"numerator":@(s.numerator),
-             @"denominator":@(s.denominator),@"pg":@(_state->currentPG.load()),
+             @"denominator":@(s.denominator),@"pg":@(s.pg),
              @"kickEnabled":@(_state->kickEnabled.load()),@"kickLevel":@(_state->kickLevel.load()),
              @"midiOut":@(_state->midiOutputConfigured.load()),
-             @"selectedPC":@(_state->selectedPC.load()),@"uncertain":@(_state->uncertain.load()),
+             @"selectedPC":@(s.selected),@"uncertain":@(s.uncertain),
              @"globalMode":@(_state->globalMode.load())};
 }
-- (NSInteger)currentProgram {return _state->currentPG.load();}
+- (NSArray*)diagnosticLog {
+    NSMutableArray *result=[NSMutableArray new];
+    for(const auto& r:_state->journal.read())[result addObject:@{@"event":@(r.event),@"pc":@(r.pc),@"origin":@(r.origin),@"beat":@(r.beat)}];
+    return result;
+}
+- (NSInteger)currentProgram {return load(*_state).pg;}
 - (NSDictionary<NSString*,id>*)currentSong {
     NSInteger pg=[self currentProgram];
     if(!beat4::validProgram((int)pg))return @{@"title":@"UNKNOWN",@"bpm":@0,@"sub":@(-1)};
@@ -333,7 +341,7 @@ Snapshot load(const State& s) noexcept {
     [[NSUserDefaults standardUserDefaults] setObject:[_songCache copy] forKey:(NSString*)kSongStoreKey];
     double bpm=[song[@"bpm"] doubleValue];
     NSInteger note=[song[@"sub"] integerValue];
-    _state->tempos[pg].store(beat4::validBPM(bpm)?bpm:0);
+    _state->tempos[pg].store(beat4::storedBPM(bpm));
     _state->notes[pg].store(beat4::validSub((int)note)?(int)note:-1);
     _state->queues[pg].store([song[@"queue"] intValue]);
     _state->pcModes[pg].store(song[@"pcMode"]?[song[@"pcMode"] intValue]:-1);

@@ -36,4 +36,17 @@ inline bool isCircuitProgramChange(uint8_t status, uint8_t program, int &pg) noe
     pg = static_cast<int>(program);
     return true;
 }
+inline int storedQueue(int value) noexcept {return value>0 && value<=65536?value:0;}
+inline int storedMode(int value) noexcept {return value>=0 && value<=2?value:-1;}
+inline double storedBPM(double value) noexcept {return validBPM(value)?std::round(value):0;}
+struct MIDIMessage { uint8_t cable=0,length=0;std::array<uint8_t,3> bytes{}; };
+inline MIDIMessage circuitMessage(int pc) noexcept {
+ if(pc<0 || pc>=64)return {};
+ return {1,2,{0xCF,static_cast<uint8_t>(pc),0}};
+}
+inline MIDIMessage tempoMessage(double bpm) noexcept {
+ int n=pitchBend14(bpm);if(n<0)return {};
+ return {0,3,{0xEE,static_cast<uint8_t>(n&127),static_cast<uint8_t>((n>>7)&127)}};
+}
+
 }

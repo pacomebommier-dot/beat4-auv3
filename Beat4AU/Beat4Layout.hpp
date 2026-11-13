@@ -11,7 +11,7 @@ inline Rect programPad(Rect area,int index) noexcept {
 }
 struct Layout {
     Rect logo, host, pg, bars, kick, subLabel, subValue, levelLabel, levelSlider;
-    Rect song, bpm, play, pause, stop;
+    Rect song, bpm, play, pause, stop, queue, modeControl, save, toggle;
     bool transportsInHeader = false;
 };
 inline Layout layoutFor(double W, double H) noexcept {
@@ -34,8 +34,8 @@ inline Layout layoutFor(double W, double H) noexcept {
     } else {
         l.pg={W*.84,headerY+6,W*.16-pad,18};
     }
-    const double barsY=compact?43.0:std::max(60.0,H*.145);
-    const double reserve=compact?97.0:(narrow?150.0:143.0);
+    const double barsY=compact?55.0:std::max(60.0,H*.145);
+    const double reserve=compact?115.0:(narrow?150.0:143.0);
     const double barsH=std::max(24.0,std::min(H*.66,H-barsY-reserve));
     const double barSide=std::max(10.0,W*.069);
     l.bars={pad+barSide,barsY,W-2*(pad+barSide),barsH};
@@ -51,7 +51,7 @@ inline Layout layoutFor(double W, double H) noexcept {
     l.subValue={noteX,toolsY,noteW,toolsH};
     l.levelLabel={noteX+noteW+gap,toolsY+2,40,18};
     l.levelSlider={levelX,toolsY+3,std::max(20.0,W-pad-levelX),toolsH-6};
-    const double footerY=toolsY+(compact?31.0:55.0);
+    const double footerY=toolsY+(compact?49.0:55.0);
     if(compact){
         l.pg={pad,footerY-14,70,13};
         l.bpm={pad,footerY, W*.35,30};
@@ -74,6 +74,11 @@ inline Layout layoutFor(double W, double H) noexcept {
         l.pause={x+step,ty,btn,36};
         l.stop={x+2*step,ty,btn,36};
     }
+    const double rowY=toolsY+toolsH+2;
+    l.queue={pad,rowY,W*.43,18};
+    l.modeControl={W*.49,rowY,W*.29,18};
+    l.save={W*.82,rowY,W*.14,18};
+    l.toggle={W-pad-35,compact?headerY:(narrow?footerY+36:footerY),35,32};
     return l;
 }
 }

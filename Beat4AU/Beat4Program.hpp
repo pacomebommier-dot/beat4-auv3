@@ -12,10 +12,15 @@ struct ProgramMemory {
 // beat and barStart use AU musical-context quarter-note units.
 struct HostPosition { bool valid=false, moving=false; double beat=0, barStart=0, barLength=4, bpm=0; };
 struct ProgramAction { int activated=-1; bool sendPC=false; double tempo=0; };
+inline bool shouldEmitTempo(ProgramAction a,double last) noexcept {return a.tempo>0 && (a.activated>=0 || std::abs(a.tempo-last)>=0.01);}
 class ProgramEngine {
 public:
  int active=-1, selected=-1;
  bool uncertain=false;
+ std::array<ProgramAction,2> renderStep(const HostPosition& h,const ProgramMemory& m,int local=-1) noexcept {
+  ProgramAction a;if(local>=0)a=request(local,true,false,h,m);
+  return {a,advance(h,m)};
+ }
  ProgramAction request(int pc,bool local,bool queued,const HostPosition& h,const ProgramMemory& m) noexcept {
   if(pc<0 || pc>=64) return {};
   selected=-1; uncertain=false;

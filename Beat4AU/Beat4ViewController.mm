@@ -69,6 +69,7 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
 @property(nonatomic,strong)Beat4AudioUnit *unit;
 @property(nonatomic,strong)Beat4Canvas *canvas;
 @property(nonatomic,strong)CADisplayLink *clock;
+@property(nonatomic,copy)NSDictionary *frameSnapshot;
 @property(nonatomic,strong)UILabel *logo,*host,*pgLabel,*subLabel,*levelLabel;
 @property(nonatomic,strong)UIButton *kickButton,*noteButton,*songButton,*bpmButton;
 @property(nonatomic,strong)UIButton *playButton,*queueButton,*saveButton;
@@ -81,6 +82,7 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
 @property(nonatomic,assign)double bpmDragStart;
 @property(nonatomic,assign)CGFloat bpmDragOriginX;
 @property(nonatomic,assign)NSInteger bpmDragProgram;
+@property(nonatomic,assign)BOOL bpmDragging;
 @end
 @implementation Beat4ViewController
 - (AUAudioUnit *)createAudioUnitWithComponentDescription:(AudioComponentDescription)desc
@@ -177,17 +179,15 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     _levelSlider.frame=frame(l.levelSlider);
     _bpmButton.frame=frame(l.bpm);
     _songButton.frame=frame(l.song);
-    _playButton.frame=frame(l.stop);
+    _playButton.frame=frame(l.toggle);
     _pageRegion.frame=frame(l.bars);
     for(int i=0;i<32;++i){
         const auto r=beat4::programPad({0,0,l.bars.w,l.bars.h},i);
         _pads[i].frame=frame(r);
     }
-    const double rowY=l.kick.y+l.kick.h+2;
-    const double width=self.view.bounds.size.width,pad=l.logo.x;
-    _queueButton.frame=CGRectMake(pad,rowY,width*.43,18);
-    _modeControl.frame=CGRectMake(width*.49,rowY,width*.29,18);
-    _saveButton.frame=CGRectMake(width*.82,rowY,width*.14,18);
+    _queueButton.frame=frame(l.queue);
+    _modeControl.frame=frame(l.modeControl);
+    _saveButton.frame=frame(l.save);
     [self refreshPage];
     // The rhythm display remains dominant; labels scale down, not the bars.
     BOOL narrow=self.view.bounds.size.width<520;
@@ -210,9 +210,9 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     _noteButton.showsMenuAsPrimaryAction=YES;
 }
 - (void)refreshSong {
-    NSDictionary *song=[self.unit currentSong];
-    NSInteger pg=[self.unit currentProgram];
-    NSDictionary *state=[self.unit transportSnapshot];
+    NSDictionary *state=self.frameSnapshot ?: [self.unit transportSnapshot];
+    NSInteger pg=[state[@"pg"] integerValue];
+    NSDictionary *song=[self.unit songForProgram:pg];
     NSInteger selected=[state[@"selectedPC"] integerValue];
     NSString *active=pg<0?@"ACTIVE —":[NSString stringWithFormat:@"ACTIVE PC %03ld",(long)pg];
     NSString *pending=selected<0?@"":[NSString stringWithFormat:@" · SELECTED %02ld%@",(long)selected+1,[state[@"uncertain"] boolValue]?@" PHASE ?":@""];
@@ -244,8 +244,10 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
 }
 - (void)dragBPM:(UIPanGestureRecognizer*)gesture {
     NSInteger pg=[self.unit currentProgram];
+    if(gesture.state==UIGestureRecognizerStateEnded || gesture.state==UIGestureRecognizerStateCancelled || gesture.state==UIGestureRecognizerStateFailed)self.bpmDragging=NO;
     if(pg<0)return;
     if(gesture.state==UIGestureRecognizerStateBegan){
+        self.bpmDragging=YES;
         self.bpmDragProgram=pg;
         double stored=[[self.unit currentSong][@"bpm"] doubleValue];
         double host=[[self.unit transportSnapshot][@"bpm"] doubleValue];
@@ -308,7 +310,7 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
 }
 - (void)refreshPage {
     self.canvas.showBars=self.page==0;[self.canvas setNeedsDisplay];
-    NSDictionary *state=[self.unit transportSnapshot];
+    NSDictionary *state=self.frameSnapshot ?: [self.unit transportSnapshot];
     int active=[state[@"pg"] intValue],selected=[state[@"selectedPC"] intValue];
     for(int i=0;i<32;++i){
         UIButton *pad=_pads[i];pad.hidden=self.page==0;int pc=((int)self.page-1)*32+i;
@@ -332,7 +334,7 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
 }
 - (void)updateDisplay:(CADisplayLink*)link {
     (void)link;
-    NSDictionary *data=[self.unit transportSnapshot];self.canvas.snapshot=data;
+    NSDictionary *data=[self.unit transportSnapshot];self.frameSnapshot=data;self.canvas.snapshot=data;
     NSInteger pg=[data[@"pg"] integerValue];
     if(pg!=self.seenPG){self.seenPG=pg;[self refreshSong];}
     BOOL synced=[data[@"synced"] boolValue];
