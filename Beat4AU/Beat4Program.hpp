@@ -16,7 +16,10 @@ inline bool shouldEmitTempo(ProgramAction a,double last) noexcept {return a.temp
 class ProgramEngine {
 public:
  int active=-1, selected=-1;
- bool uncertain=false;
+ bool uncertain=false,estimated=false;
+ void outputFailed(int previous,int requested) noexcept {
+  active=previous;selected=requested;uncertain=true;phaseKnown=false;ramp=false;
+ }
  std::array<ProgramAction,2> renderStep(const HostPosition& h,const ProgramMemory& m,int local=-1) noexcept {
   ProgramAction a;if(local>=0)a=request(local,true,false,h,m);
   return {a,advance(h,m)};
@@ -66,7 +69,7 @@ private:
  bool phaseKnown=false,pendingLocal=false,wasMoving=false,haveBeat=false,ramp=false;
  double anchor=0,due=0,lastBeat=0,rampStart=0,rampLength=0,startBPM=0,targetBPM=0;
  ProgramAction activate(int pc,bool local,const HostPosition& h,const ProgramMemory& m) noexcept {
-  active=pc;selected=-1;uncertain=false;anchor=h.beat;phaseKnown=h.valid;wasMoving=h.moving;
+  active=pc;selected=-1;uncertain=false;estimated=local;anchor=h.beat;phaseKnown=h.valid;wasMoving=h.moving;
   ramp=false;
   ProgramAction a{pc,local,0};
   const double target=m.bpm[pc];

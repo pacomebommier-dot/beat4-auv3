@@ -36,5 +36,6 @@ int main(){
  boundary.beat=9;drift.request(0,true,false,boundary,cycles);boundary.beat=16;
  assert(drift.advance(boundary,cycles).activated==0);
  assert(shouldEmitTempo({5,false,140},140));assert(!shouldEmitTempo({-1,false,140},140));
+ order.outputFailed(0,2);assert(order.active==0 && order.selected==2 && order.uncertain);
  std::cout<<"R10 PC/queue/tempo state machine PASS\n";
 }
