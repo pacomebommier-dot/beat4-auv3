@@ -55,7 +55,7 @@ struct Snapshot {
 };
 Snapshot load(const State& s) noexcept {
     Snapshot result{};
-    for(int attempt=0;attempt<4;++attempt){
+    for(;;){
         const auto a=s.sequence.load(std::memory_order_acquire);
         if(a&1) continue;
         result={s.tick.load(std::memory_order_relaxed), s.callbacks.load(std::memory_order_relaxed),
@@ -199,7 +199,6 @@ Snapshot load(const State& s) noexcept {
         s->memories.globalMode=std::clamp(s->globalMode.load(),0,2);
         int previousActive=s->engine.active;
         auto apply=[&](beat4::ProgramAction a){
-            if(a.activated>=0)s->journal.write(3,a.activated,a.sendPC?1:0,beat);
             if(a.sendPC){
                 if(!midiOut){s->journal.write(6,a.activated,1,beat);s->engine.outputFailed(previousActive,a.activated);return;}
                 // Immediate PC at our boundary, avoiding a second native Circuit queue.
@@ -208,10 +207,12 @@ Snapshot load(const State& s) noexcept {
                 s->journal.write(status==noErr?4:6,a.activated,1,beat);
                 if(status!=noErr){s->engine.outputFailed(previousActive,a.activated);return;}
             }
+            if(a.activated>=0)s->journal.write(3,a.activated,a.sendPC?1:0,beat);
             if(midiOut && beat4::shouldEmitTempo(a,s->lastTempoSent)){
                 auto message=beat4::tempoMessage(a.tempo);
                 if(message.length){
-                    midiOut(sampleTime,message.cable,message.length,message.bytes.data());s->lastTempoSent=a.tempo;
+                    const auto status=midiOut(sampleTime,message.cable,message.length,message.bytes.data());
+                    if(status==noErr)s->lastTempoSent=a.tempo;else s->journal.write(6,s->engine.active,2,beat);
                 }
             }
         };
@@ -232,9 +233,12 @@ Snapshot load(const State& s) noexcept {
                 apply(s->engine.request(raw%64,false,raw>=64,position,s->memories));
             }
         }
+        previousActive=s->engine.active;
         const int local=s->localPC.exchange(-1);
         if(local>=0)s->journal.write(2,local,1,beat);
         for(auto a:s->engine.renderStep(position,s->memories,local))apply(a);
+        if(s->engine.selected!=s->selectedPC.load() || s->engine.uncertain!=s->uncertain.load())
+            s->journal.write(s->engine.uncertain?5:7,s->engine.selected,local>=0?1:0,beat);
         const int request=s->transportRequest.exchange(-1);
         if(request>=0 && midiOut){
             // Explicit MIDI Learn mapping required in AUM: ch15 CC119 -> transport toggle.

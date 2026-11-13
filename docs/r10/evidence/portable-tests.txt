@@ -1,0 +1,8 @@
+R10 V08 modes, interruption, strict next BAR PASS
+R10 MIDI bytes/cables and stored memory validation PASS
+R10 PC/queue/tempo state machine PASS
+Beat4 core PASS: sequence, bars, negative beats, stop/hold, bounded prediction
+Beat4 transport memory PASS: play, pause, resume, rewind, at-zero ambiguity, missing sync
+Songs, PG channel, tempo encoding, sub tuning and kick: PASS
+Beat gate PASS: 3 true beats / 72000 samples, no per-buffer kicks, hold/resume, rewind
+Responsive layout PASS: 10 iPhone/iPad sizes, visible bars and controls
