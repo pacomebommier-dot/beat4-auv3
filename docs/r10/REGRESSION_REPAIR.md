@@ -17,3 +17,9 @@ ASan/UBSan local PASS with ASAN_OPTIONS=detect_leaks=0; LeakSanitizer unsupporte
 
 R02 exact published gradient stops restored: #d9efc7 → #bbd8ad (50%) → #829e79. Logo #e4e6db.
 New geometry assertions pin compact tool typographic edge 273 and slider center267 from approved SVG. Gesture test pins ±36points→±9BPM and fallback120.
+
+Final verification: GitHub Actions run 43519975745, commit b8bc9993bf1f2c9bc77c9943fe09620f741a87f5: SUCCESS. 14 portable executables, full ASan/UBSan, persistence Foundation, iOS app+extension build, 12 UIKit renders and native MIDI/lifecycle harness, IPA verification all PASS.
+IPA 0.5.8/build8 SHA256 d9224b147b7632872176de15afdcbd1d4074d2769d4acceabee92b745629f320. Artifact14082952381; screenshots14081694674.
+Task5: native execution complete; visual inspection of captures blocked by GitHub Azure download403, as is IPA transfer into Drive. AUM/Circuit hardware remains untested.
+Source ZIP upload to Drive rejected by automatic approval review as beyond original IPA authorization; not retried or routed around. Sources remain in authorized GitHub PR3.
+Branch retained, PR remains draft; no merge performed.
