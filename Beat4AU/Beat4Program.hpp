@@ -27,6 +27,7 @@ public:
  ProgramAction request(int pc,bool local,bool queued,const HostPosition& h,const ProgramMemory& m) noexcept {
   if(pc<0 || pc>=64) return {};
   selected=-1; uncertain=false;
+  if(pc==active && (local || queued))return {};
   // Immediate incoming PC is evidence of the sender's project change, not a local queue request.
   if(h.valid && (!h.moving || (!local && !queued))) return activate(pc,local,h,m);
   selected=pc; pendingLocal=local;

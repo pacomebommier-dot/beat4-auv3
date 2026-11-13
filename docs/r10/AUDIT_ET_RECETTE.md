@@ -24,7 +24,7 @@ Les cinq suites initiales passaient avant modification. L’ancienne CI réussie
 - OFF sombre, SELECTED gris, ACTIVE blanc ; snapshot cohérent d’identité/attente/transport pour une frame UI ; label distinct ACTIVE/SELECTED et MODE PC.
 - QUEUE optionnelle positive par PC, saisie en beats entiers, autosauvegarde ; appui long sur un pad pour éditer sans activer. Valeur vide affichée « — ». Aucun Q ON/OFF ni deuxième paramètre Drum 1.
 - Queue du PC sortant ; absence = frontière de mesure strictement future depuis le downbeat AUM ; cycle explicite ancré sur l’activation locale, jamais N beats après la demande.
-- Dernière demande locale en attente traitée avant l’activation due du même rendu ; pas d’ancien pending réactivé après hold/perte de position.
+- Toucher le pad ACTIVE annule une attente sans le sélectionner lui-même ni réémettre son PC. Un PC immédiat externe identique reste un rappel V08. Dernière demande locale en attente traitée avant l’activation due du même rendu ; pas d’ancien pending réactivé après hold/perte de position.
 - PC local émis en valeur immédiate 0–63 au moment de la frontière calculée, canal 16, sortie Circuit dédiée ; PC entrant jamais retransmis.
 - PC externe 64–127 conservé SELECTED/phase incertaine. Il faut une nouvelle observation immédiate 0–63 pour l’activer ; aucun acquittement Circuit inventé.
 - BPM entier autosauvé ; BPM observé distinct ; SAVE enregistre exclusivement MODE PC ; global inchangé au rappel. Modes 0, 1 (8 mesures), 2 (2 beats) ; annulation au hold/perte de position ; pas de reprise automatique.
@@ -35,6 +35,8 @@ Les cinq suites initiales passaient avant modification. L’ancienne CI réussie
 
 1. **Hold STOP/PAUSE :** le flag Moving ne prouve pas l’identité de la commande. Un nouveau rappel lorsque Moving=false applique le BPM immédiatement ; le passage à hold annule pending et rampe sans rappel. Coût si cette politique métier ne convient pas : adapter le devenir des demandes pending ; aucune reprise fantôme actuellement.
 2. **Phase de cycle :** ancrage de l’app à l’activation locale, ou au premier beat PLAY observé après une sélection à l’arrêt. Ce repère ne prouve pas la phase Drum 1. Coût si Circuit n’est pas aligné : transition physiquement décalée ; T15 obligatoire. Externe queued reste incertain.
+3. **Queue en cours d’attente :** l’échéance capture la QUEUE du sortant à la demande. Une édition ne recalcule pas rétroactivement l’attente déjà engagée ; une nouvelle demande utilise la nouvelle valeur. Cette politique doit être qualifiée en recette.
+
 3. **Résolution du rendu :** le moteur décide aux observations du callback audio. L’activation peut être retardée d’un buffer ; `eventSampleTime` entrant n’est pas encore utilisé pour un sous-découpage du buffer. Il ne s’agit pas d’un ordonnanceur MIDI vérifié à l’échantillon. À qualifier/compléter avant diffusion scène.
 4. **Transport AUM :** nouveau mapping proposé CC119 canal 15 en impulsion 127/0, à apprendre sur le front montant uniquement pour le toggle. La prise en charge effective n’est pas prouvée. Le pitch bend canal 15 conserve le mapping BPM 20–240 préexistant ; les consignes envoyées ne sont jamais affichées comme BPM observé.
 5. **Mémoires héritées :** les anciennes entrées brutes 64–127 restent dans v1, sans fusion silencieuse. Auditer leurs éventuels conflits avec 0–63 avant toute migration manuelle. Aucun paramètre Drum 1 du LAB web n’est importé.

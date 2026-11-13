@@ -36,6 +36,9 @@ int main(){
  boundary.beat=9;drift.request(0,true,false,boundary,cycles);boundary.beat=16;
  assert(drift.advance(boundary,cycles).activated==0);
  assert(shouldEmitTempo({5,false,140},140));assert(!shouldEmitTempo({-1,false,140},140));
+ ProgramEngine same;HostPosition stopped{true,false,0,0,4,128};same.request(7,false,false,stopped,m);
+ stopped.moving=true;same.request(8,true,false,stopped,m);same.request(7,true,false,stopped,m);
+ assert(same.active==7 && same.selected==-1); // touching ACTIVE cancels pending, never selects itself
  order.outputFailed(0,2);assert(order.active==0 && order.selected==2 && order.uncertain);
  std::cout<<"R10 PC/queue/tempo state machine PASS\n";
 }
