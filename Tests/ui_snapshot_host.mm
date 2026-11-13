@@ -5,6 +5,10 @@
 #include <cmath>
 #import <QuartzCore/QuartzCore.h>
 
+@interface Beat4ViewController (SnapshotTest)
+- (void)updateDisplay:(CADisplayLink *)link;
+@end
+
 @interface SnapshotApp : UIResponder <UIApplicationDelegate>
 @property(nonatomic,strong)UIWindow *window;
 @end
@@ -32,7 +36,7 @@
   };
   assert([unit allocateRenderResourcesAndReturnError:&error] && !error);
   AUInternalRenderBlock render=unit.internalRenderBlock;
-  auto tick=[&](){
+  void (^tick)(void)=^{
    float samples[256]={};AudioBufferList buffers{};buffers.mNumberBuffers=1;
    buffers.mBuffers[0]={2,sizeof(samples),samples};
    AudioTimeStamp stamp{};stamp.mFlags=kAudioTimeStampSampleTimeValid;stamp.mSampleTime=beat*48000*60/128;
@@ -55,7 +59,7 @@
     [vc setValue:@(page) forKey:@"page"];
     vc.view.frame=CGRectMake(0,0,size.width,size.height);
     [vc.view setNeedsLayout];[vc.view layoutIfNeeded];
-    [vc performSelector:NSSelectorFromString(@"updateDisplay:") withObject:nil];
+    [vc updateDisplay:nil];
     NSArray<UIButton*> *pads=[vc valueForKey:@"pads"];assert(pads.count==32);
     UILabel *header=[vc valueForKey:@"pgLabel"];
     assert([header.text containsString:@"ACTIVE PC 007"] && [header.text containsString:@"SELECTED 40"]);
