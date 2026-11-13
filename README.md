@@ -32,6 +32,6 @@ BEAT4_SANITIZE=1 bash Tests/run.sh
 
 Neuf exécutables C++ couvrent PC/QUEUE, tempo/MODE, octets MIDI, validation des mémoires, journal, transport, audio et géométrie. Les contrôles géométriques ne sont pas des captures UIKit.
 
-Sur Mac : ouvrir `Beat4.xcodeproj`, schéma `Beat4App`, configurer les identifiants et la signature de l’app et de l’extension. Le workflow iOS compile sans signature et exécute le test natif `Tests/test_persistence.mm`. Il ne fabrique pas d’IPA avant la recette requise.
+Sur Mac : ouvrir `Beat4.xcodeproj`, schéma `Beat4App`, configurer les identifiants et la signature de l’app et de l’extension. Le workflow iOS sur runner Intel compile sans signature, exécute le test natif `Tests/test_persistence.mm` et produit douze captures UIKit avec assertions d’état/couleurs et trace MIDI sur hôte simulé (`Tests/native_snapshots.sh`). Il ne fabrique pas d’IPA avant la recette requise.
 
 Les mémoires v2 sont enregistrées dans les préférences de l’extension. L’archive v1 est conservée ; les anciennes entrées brutes 64–127 ne sont pas fusionnées arbitrairement. Historique de l’ancien fonctionnement : [README V05 archivé](docs/archive/README_V05.md).

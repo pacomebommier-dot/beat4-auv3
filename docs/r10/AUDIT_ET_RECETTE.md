@@ -51,22 +51,22 @@ PASS ci-dessous désigne uniquement la preuve précisée. Aucune ligne ne consti
 |---|---|---|
 | T01 | PASS moteur de navigation ; NON TESTÉ geste natif | `test_layout`, cycle dans les deux sens ; swipe et absence MIDI à capturer sur appareil |
 | T02 | NON TESTÉ visuellement | Titre natif codé ; captures comparées à R02 non réalisées |
-| T03 | PASS moteur ; NON TESTÉ UI native | `test_program` ; blanc/gris/sombre à capturer |
+| T03 | PASS moteur et UIKit sur hôte simulé | `test_program` + 12 captures natives ; états des deux grilles vérifiés dans le harness |
 | T04 | PASS simulé | prochain BAR, pas beat 4 ni quatre beats après appui ; `test_program`, `test_tempo_modes` |
 | T05 | PASS simulé ; NON TESTÉ AUM | ancrage et absence de dérive ; phase physique à vérifier |
-| T06 | PASS moteur/octets ; NON TESTÉ routage | rappel tenu immédiat ; sortie PC distincte du transport |
-| T07 | PASS moteur/octets ; NON TESTÉ sonde physique | action externe sans sendPC ; canal et octets dans `test_r10_midi_memory` |
-| T08 | PASS simulé | queued externe incertain ; pas de faux ACTIVE ; journal branché |
+| T06 | PASS moteur et adaptateur AUv3 simulé | PC à l’arrêt émis sur câble Circuit ; aucun PLAY ; routage AUM physique NON TESTÉ |
+| T07 | PASS moteur et adaptateur AUv3 simulé | PC entrants immédiat et queued sans retransmission ; sonde physique NON TESTÉE |
+| T08 | PASS moteur et adaptateur AUv3 simulé | événement MIDI queued garde A actif et phase incertaine ; trace JSON générée |
 | T09 | PASS simulé | queue A=8, queue B=16 ; `test_program` |
 | T10 | PASS simulé | remplacement, frontière de rendu, hold ; `test_program` |
 | T11 | PASS simulé | BPM absent neutre ; `test_tempo_modes` |
 | T12 | PASS simulé ; NON TESTÉ AUM | modes 0/1/2, 32 beats et 2 beats ; `test_tempo_modes` |
-| T13 | PASS validation portable ; test natif fourni | `test_r10_midi_memory`, `test_persistence.mm` ; résultat macOS CI à lire |
+| T13 | PASS validation portable et persistance native macOS | `test_r10_midi_memory`, `test_persistence.mm` exécutés avec succès en CI |
 | T14 | PASS simulé | annulation hold, pas de reprise ; `test_program`, `test_tempo_modes` |
 | T15 | NON TESTÉ | iPad/AUM et Circuit Tracks indisponibles dans cet environnement |
 | T16 | PASS portables ; NON TESTÉ natif/AUM | suites gate/audio/enveloppe/layout ; automation LEVEL et audition à vérifier |
 
-Responsive : géométrie des pads/contrôles testée à 720×400, 667×375, 1024×768, 390×844 et six autres tailles. Ce ne sont pas des captures UIKit. Persistance native : test exécuté uniquement si le job macOS le confirme. Le contrôle LSan local est incompatible avec ptrace ; ASan/UBSan locaux passent avec `detect_leaks=0`, la CI Linux exécute la commande complète.
+Responsive : géométrie des pads/contrôles testée à 720×400, 667×375, 1024×768, 390×844 et six autres tailles. Ce ne sont pas des captures UIKit. Persistance native : PASS macOS Intel au commit `8b2253c`, exécution `43498164859`. Le contrôle LSan local est incompatible avec ptrace ; ASan/UBSan locaux passent avec `detect_leaks=0`, la CI Linux exécute la commande complète.
 
 ## Procédure AUM / Circuit avant IPA
 
@@ -77,3 +77,22 @@ Responsive : géométrie des pads/contrôles testée à 720×400, 667×375, 1024
 - Exécuter T01–T16 avec sonde MIDI horodatée, filmer AUM et Circuit pour T15 ; inclure PC successifs, STOP/PAUSE pending, interruption de rampe, démarrage milieu de timeline et perte de phase.
 - Relancer l’app/l’extension et la session pour vérifier BPM, MODE, QUEUE, titre et SUB. Audition KICK/SUB/LEVEL, LEDs, screenshots aux quatre tailles de recette.
 - Seulement après résultat CI du dernier code et recette physique satisfaisante : signature/provisionnement Apple et packaging IPA. Le workflow R10 compile sans fabriquer d’IPA.
+
+## Vérification complémentaire du 13 novembre — reprise
+
+Le runner `macos-15` ARM n’avait acquis aucun job après plusieurs tentatives : échec d’infrastructure, sans exécution du build. Retour au runner `macos-15-intel`, puis exécution complète réussie :
+
+- Commit code/tests/CI vérifié : `8b2253ca9d6fbb7165144b4fa495b2bed48d7e37`.
+- CI : https://github.com/pacomebommier-dot/beat4-auv3/actions/runs/43498164859 — **SUCCESS**.
+- Neuf exécutables portables, ASan/UBSan : PASS.
+- Persistance Foundation/macOS (migration v1, v2, indépendance BPM/MODE/QUEUE) : PASS.
+- Build Release iOS unsigned du container et de l’extension : PASS.
+- Harness iOS Simulator compilant les vrais `Beat4AudioUnit.mm` et `Beat4ViewController.mm` : PASS ; douze rendus UIKit (trois pages × quatre tailles), assertions des labels ACTIVE/SELECTED et des couleurs OFF/gris/blanc.
+- Injection de vrais `AURenderEvent` PC dans le render block de l’AUv3 avec callbacks hôte simulés : PASS anti-écho, queued sans activation prématurée, PC local vers câble Circuit uniquement et aucun PLAY implicite. Trace `mock-host-midi-trace.json` dans l’artefact.
+- Artefact GitHub : **R10-native-UIKit-snapshots** de cette exécution. Captures hors écran dans un vrai processus iOS Simulator ; ce ne sont ni des captures AUM ni une simulation web.
+
+Le téléchargement des PNG depuis le stockage GitHub Azure reste refusé par le proxy (403 CONNECT vers `productionresultssa13.blob.core.windows.net`), y compris après l’autorisation déclarée du domaine et une nouvelle connexion. Les images sont générées et conservées dans GitHub, mais pas inspectées visuellement ici ni transférées dans Drive. La conformité graphique R02 pixel/typographie et les gestes réels restent NON VALIDÉS. Les assertions UIKit ne remplacent pas cette inspection.
+
+Les erreurs de compilation du harness (capture `__block` par lambda puis liaison CoreGraphics manquante) ont été corrigées. Aucun changement au code musical de production depuis la livraison `9ba8524` durant cette reprise : seuls CI, tests et documentation ont changé. Les différences d’un éventuel commit final de documentation avec `8b2253c` sont vérifiables par `git diff` ; les fichiers de code/build/tests sont identiques.
+
+AUM/Circuit physiques, signature Apple et IPA restent non réalisés. Aucun PASS matériel ni confirmation de phase Circuit ajouté.
