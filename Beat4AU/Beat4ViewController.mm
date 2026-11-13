@@ -7,6 +7,10 @@
 #include "Beat4Kick.hpp"
 #include "Beat4Songs.hpp"
 #include "Beat4Layout.hpp"
+#include "Beat4Display.hpp"
+#include "Beat4Lights.hpp"
+#include "Beat4Transport.hpp"
+#include "Beat4BPMGesture.hpp"
 
 static UIColor *RGB(CGFloat r,CGFloat g,CGFloat b,CGFloat a=1){
     return [UIColor colorWithRed:r/255.0 green:g/255.0 blue:b/255.0 alpha:a];
@@ -14,53 +18,59 @@ static UIColor *RGB(CGFloat r,CGFloat g,CGFloat b,CGFloat a=1){
 static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     return [UIFont monospacedSystemFontOfSize:sz weight:w];
 }
-@interface Beat4Canvas : UIView
+@interface Beat4Button : UIButton @end
+@implementation Beat4Button
+- (BOOL)pointInside:(CGPoint)point withEvent:(UIEvent*)event {
+    (void)event;const CGFloat dx=MAX(0,(44-self.bounds.size.width)*.5);
+    const CGFloat dy=MAX(0,(44-self.bounds.size.height)*.5);
+    return CGRectContainsPoint(CGRectInset(self.bounds,-dx,-dy),point);
+}
+@end
+@interface Beat4Canvas : UIView {
+    beat4::Lights _lights;
+    CFTimeInterval _lightTick;
+}
 @property(nonatomic,copy)NSDictionary<NSString*,NSNumber*> *snapshot;
 @property(nonatomic,assign)CGRect lightBounds;
 @property(nonatomic,assign)BOOL showBars;
+- (BOOL)lightsAnimating;
 @end
 @implementation Beat4Canvas
+- (BOOL)lightsAnimating {return _lights.animating();}
 - (void)setSnapshot:(NSDictionary<NSString*,NSNumber*>*)snapshot {
+    const CFTimeInterval now=CACurrentMediaTime();
+    const double dt=_lightTick>0?now-_lightTick:0;_lightTick=now;
+    const bool stop=[snapshot[@"localStop"] boolValue] ||
+        [snapshot[@"mode"] intValue]==static_cast<int>(beat4::HostMode::Rewound);
+    _lights.update([snapshot[@"displayBeat"] doubleValue],[snapshot[@"moving"] boolValue],
+        [snapshot[@"synced"] boolValue],stop,dt,[snapshot[@"bpm"] doubleValue]);
     _snapshot=[snapshot copy];[self setNeedsDisplay];
 }
 - (void)drawRect:(CGRect)rect {
-    [[UIColor colorWithRed:.028 green:.035 blue:.030 alpha:1] setFill]; UIRectFill(rect);
-    if(!self.showBars)return;
-    const BOOL synced=[self.snapshot[@"synced"] boolValue];
-    const BOOL moving=[self.snapshot[@"moving"] boolValue];
-    const int active=[self.snapshot[@"active"] intValue];
-    const double fraction=[self.snapshot[@"fraction"] doubleValue];
-    const CGFloat pulse=(synced&&moving)?static_cast<CGFloat>(beat4::pulseBrightness(fraction)):0;
-    const CGRect area=self.lightBounds;
-    const CGFloat gap=std::max((CGFloat)18,std::min((CGFloat)56,area.size.width*.105));
-    const CGFloat bw=(area.size.width-3*gap)/4;
-    CGContextRef ctx=UIGraphicsGetCurrentContext();
-    if(!ctx || bw<=0)return;
+    [RGB(7,9,8) setFill];UIRectFill(rect);if(!self.showBars)return;
+    const auto layout=beat4::layoutFor(self.bounds.size.width,self.bounds.size.height);
+    CGContextRef ctx=UIGraphicsGetCurrentContext();if(!ctx)return;
     for(int i=0;i<4;++i){
-        CGRect r=CGRectMake(CGRectGetMinX(area)+i*(bw+gap),CGRectGetMinY(area),bw,CGRectGetHeight(area));
-        CGFloat energy=(synced&&moving&&i==active)?pulse:0;
-        if(synced&&!moving&&i==active)energy=.18;
-        const CGFloat corner=std::max((CGFloat)3,std::min((CGFloat)7,bw*.10));
-        UIBezierPath *shape=[UIBezierPath bezierPathWithRoundedRect:r cornerRadius:corner];
+        const CGFloat energy=_lights.energy(i);
+        const CGRect r=CGRectMake(self.lightBounds.origin.x+i*(layout.barWidth+layout.barGap),
+            self.lightBounds.origin.y,layout.barWidth,self.lightBounds.size.height);
+        UIBezierPath *shape=[UIBezierPath bezierPathWithRoundedRect:r cornerRadius:layout.corner];
         CGContextSaveGState(ctx);
-        if(energy>.015){
-            CGContextSetShadowWithColor(ctx,CGSizeZero,14+energy*28,RGB(178,221,159,.30*energy).CGColor);
-            [RGB(172,214,153,.16+.42*energy) setFill];[shape fill];
-            CGContextSetShadowWithColor(ctx,CGSizeZero,8+energy*12,RGB(210,244,202,.3*energy).CGColor);
+        if(energy>.001)CGContextSetShadowWithColor(ctx,CGSizeZero,12*layout.scale,
+            RGB(151,185,139,.35*energy).CGColor);
+        [RGB(24,34,26) setFill];[shape fill];CGContextRestoreGState(ctx);
+        if(energy>.001){
+            // V2/R02 vertical phosphor gradient; energy comes exclusively from host-beat envelope.
+            const CGFloat colors[]={.75,.86,.65,energy, .70,.82,.62,energy, .50,.63,.46,energy};
+            const CGFloat stops[]={0,.52,1};CGColorSpaceRef space=CGColorSpaceCreateDeviceRGB();
+            CGGradientRef gradient=CGGradientCreateWithColorComponents(space,colors,stops,3);
+            CGContextSaveGState(ctx);[shape addClip];
+            CGContextDrawLinearGradient(ctx,gradient,CGPointMake(CGRectGetMidX(r),CGRectGetMinY(r)),
+                CGPointMake(CGRectGetMidX(r),CGRectGetMaxY(r)),0);
+            CGContextRestoreGState(ctx);CGGradientRelease(gradient);CGColorSpaceRelease(space);
         }
-        // Even at rest all four physical phosphor segments are readable in darkness.
-        [RGB(26+180*energy,35+205*energy,26+164*energy,1) setFill];[shape fill];
-        CGContextRestoreGState(ctx);
-        CGRect core=CGRectInset(r,bw*.13,bw*.10);
-        if(energy>.01 && core.size.width>1 && core.size.height>1){
-            UIBezierPath *inner=[UIBezierPath bezierPathWithRoundedRect:core cornerRadius:std::max(2.0,corner*.50)];
-            [RGB(218,248,208,.14+energy*.60) setFill];[inner fill];
-        }
-        CGContextSaveGState(ctx);
-        CGContextSetStrokeColorWithColor(ctx,RGB(95,115,91,.13).CGColor);
-        CGContextSetLineWidth(ctx,.6);
-        [shape stroke];
-        CGContextRestoreGState(ctx);
+        [RGB(43+148*energy,60+155*energy,45+134*energy) setStroke];
+        shape.lineWidth=MAX(.6,layout.scale);[shape stroke];
     }
 }
 @end
@@ -70,7 +80,7 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
 @property(nonatomic,strong)Beat4Canvas *canvas;
 @property(nonatomic,strong)CADisplayLink *clock;
 @property(nonatomic,copy)NSDictionary *frameSnapshot;
-@property(nonatomic,strong)UILabel *logo,*host,*pgLabel,*subLabel,*levelLabel;
+@property(nonatomic,strong)UILabel *logo,*versionLabel,*host,*pgLabel,*subLabel,*levelLabel,*modeLabel,*pcModeLabel;
 @property(nonatomic,strong)UIButton *kickButton,*noteButton,*songButton,*bpmButton;
 @property(nonatomic,strong)UIButton *playButton,*queueButton,*saveButton;
 @property(nonatomic,strong)UISegmentedControl *modeControl;
@@ -83,6 +93,9 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
 @property(nonatomic,assign)CGFloat bpmDragOriginX;
 @property(nonatomic,assign)NSInteger bpmDragProgram;
 @property(nonatomic,assign)BOOL bpmDragging;
+@property(nonatomic,assign)uint64_t seenRevision;
+@property(nonatomic,assign)CFTimeInterval lastWatchdog;
+@property(nonatomic,assign)BOOL lastMoving;
 @end
 @implementation Beat4ViewController
 - (AUAudioUnit *)createAudioUnitWithComponentDescription:(AudioComponentDescription)desc
@@ -95,7 +108,7 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     v.adjustsFontSizeToFitWidth=YES;v.minimumScaleFactor=.66;[self.view addSubview:v];return v;
 }
 - (UIButton *)makeButton:(NSString *)text size:(CGFloat)size {
-    UIButton *b=[UIButton buttonWithType:UIButtonTypeCustom];
+    UIButton *b=[Beat4Button buttonWithType:UIButtonTypeCustom];
     [b setTitle:text forState:UIControlStateNormal];[b setTitleColor:RGB(219,223,209) forState:UIControlStateNormal];
     b.titleLabel.font=Mono(size,UIFontWeightMedium);
     b.contentHorizontalAlignment=UIControlContentHorizontalAlignmentLeft;
@@ -108,6 +121,9 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     self.seenPG=-999;self.editedPC=0;self.canvas.showBars=YES;
     _logo=[self makeLabel:@"BEAT//4" size:20 color:RGB(220,224,212)];
     _logo.font=Mono(20,UIFontWeightSemibold);
+    _versionLabel=[self makeLabel:[NSString stringWithFormat:@"v%@",[NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"0.5.8"] size:8 color:RGB(122,145,121)];
+    _modeLabel=[self makeLabel:@"TEMPO MODE" size:10 color:RGB(197,208,197)];
+    _pcModeLabel=[self makeLabel:@"" size:10 color:RGB(132,157,136)];
     _host=[self makeLabel:@"AUM  •  WAIT" size:11 color:RGB(144,161,140)];_host.textAlignment=NSTextAlignmentRight;
     _pgLabel=[self makeLabel:@"PC  ---" size:11 color:RGB(132,150,131)];
     _subLabel=[self makeLabel:@"SUB" size:10 color:RGB(123,136,122)];
@@ -131,7 +147,7 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     UIPanGestureRecognizer *bpmPan=[[UIPanGestureRecognizer alloc]initWithTarget:self action:@selector(dragBPM:)];
     bpmPan.maximumNumberOfTouches=1;
     [_bpmButton addGestureRecognizer:bpmPan];
-    _bpmButton.accessibilityHint=@"Glisser horizontalement pour régler le BPM entier, un BPM par 9 points";
+    _bpmButton.accessibilityHint=@"Glisser horizontalement pour régler le BPM entier, un BPM par 4 points";
     _playButton=[self makeButton:@"▶" size:20];
     [_playButton addTarget:self action:@selector(toggleTransport:) forControlEvents:UIControlEventTouchUpInside];
     _playButton.accessibilityLabel=@"AUM PLAY/STOP (CC110/111 canal 16)";
@@ -163,38 +179,45 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
 }
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
-    const beat4::Layout l=beat4::layoutFor(self.view.bounds.size.width,self.view.bounds.size.height);
-    auto frame=[](beat4::Rect r) {return CGRectMake(r.x,r.y,r.w,r.h);};
-    _logo.frame=frame(l.logo);
-    _host.frame=CGRectMake(self.view.bounds.size.width*.38,l.logo.y,self.view.bounds.size.width*.58,20);
-    _host.hidden=l.transportsInHeader && self.view.bounds.size.width<380;
-    _pgLabel.frame=CGRectMake(l.logo.x,l.logo.y+28,self.view.bounds.size.width-2*l.logo.x,16);
-    _pgLabel.hidden=NO;
-    self.canvas.lightBounds=frame(l.bars);
-    [self.canvas setNeedsDisplay];
-    _kickButton.frame=frame(l.kick);
-    _subLabel.frame=frame(l.subLabel);
-    _noteButton.frame=frame(l.subValue);
-    _levelLabel.frame=frame(l.levelLabel);
-    _levelSlider.frame=frame(l.levelSlider);
-    _bpmButton.frame=frame(l.bpm);
-    _songButton.frame=frame(l.song);
-    _playButton.frame=frame(l.toggle);
-    _pageRegion.frame=frame(l.bars);
-    for(int i=0;i<32;++i){
-        const auto r=beat4::programPad({0,0,l.bars.w,l.bars.h},i);
-        _pads[i].frame=frame(r);
+    const auto l=beat4::layoutFor(self.view.bounds.size.width,self.view.bounds.size.height);
+    auto frame=[](beat4::Rect r){return CGRectMake(r.x,r.y,r.w,r.h);};
+    _logo.frame=frame(l.logo);_logo.font=Mono(l.logoSize,UIFontWeightSemibold);
+    _versionLabel.frame=frame(l.version);_versionLabel.font=Mono(l.versionSize);
+    _host.frame=frame(l.host);_host.font=Mono(l.hostSize);_host.hidden=NO;
+    _pgLabel.frame=frame(l.status);_pgLabel.font=Mono(l.transportsInHeader?12*l.scale:14*l.scale);
+    self.canvas.lightBounds=frame(l.bars);[self.canvas setNeedsDisplay];
+    _kickButton.frame=frame(l.kick);_kickButton.titleLabel.font=Mono(l.kickSize);
+    _subLabel.frame=frame(l.subLabel);_subLabel.font=Mono(l.subSize);
+    _noteButton.frame=frame(l.subValue);_noteButton.titleLabel.font=Mono(l.noteSize);
+    _levelLabel.frame=frame(l.levelLabel);_levelLabel.font=Mono(l.levelSize);
+    // Align actual font descenders to the same R02 lower typographic edge.
+    if(!l.portrait){
+        const CGFloat bottom=l.kick.y+l.kick.h;
+        for(UILabel *label in @[_subLabel,_levelLabel]){
+            CGRect f=label.frame;f.size.height=label.font.lineHeight;
+            f.origin.y=bottom+label.font.descender-f.size.height;label.frame=f;
+        }
+        for(UIButton *button in @[_kickButton,_noteButton]){
+            CGRect f=button.frame;f.size.height=button.titleLabel.font.lineHeight;
+            f.origin.y=bottom+button.titleLabel.font.descender-f.size.height;button.frame=f;
+        }
     }
+    _levelSlider.frame=frame(l.levelSlider);
+    _bpmButton.frame=frame(l.bpm);_bpmButton.titleLabel.font=Mono(l.bpmSize,UIFontWeightMedium);
+    _songButton.frame=frame(l.song);_songButton.titleLabel.font=Mono(l.songSize,UIFontWeightMedium);
+    _songButton.titleLabel.adjustsFontSizeToFitWidth=YES;_songButton.titleLabel.minimumScaleFactor=.5;
+    _playButton.frame=frame(l.toggle);_playButton.titleLabel.font=Mono(24*l.scale);
+    _pageRegion.frame=frame(l.bars);
+    for(int i=0;i<32;++i)_pads[i].frame=frame(beat4::programPad({0,0,l.bars.w,l.bars.h},i));
     _queueButton.frame=frame(l.queue);
+    _modeLabel.frame=frame(l.modeLabel);_modeLabel.font=Mono(l.modeSize);
     _modeControl.frame=frame(l.modeControl);
-    _saveButton.frame=frame(l.save);
+    _modeControl.selectedSegmentTintColor=RGB(190,234,178);
+    [_modeControl setTitleTextAttributes:@{NSFontAttributeName:Mono(MAX(9.,l.modeSize)),NSForegroundColorAttributeName:RGB(228,235,220)} forState:UIControlStateNormal];
+    [_modeControl setTitleTextAttributes:@{NSForegroundColorAttributeName:RGB(19,27,18)} forState:UIControlStateSelected];
+    _saveButton.frame=frame(l.save);_saveButton.titleLabel.font=Mono(l.modeSize);
+    _pcModeLabel.frame=frame(l.pcMode);_pcModeLabel.font=Mono(MAX(9.,l.modeSize-1));
     [self refreshPage];
-    // The rhythm display remains dominant; labels scale down, not the bars.
-    BOOL narrow=self.view.bounds.size.width<520;
-    _bpmButton.titleLabel.font=Mono(narrow?19:27,UIFontWeightMedium);
-    _songButton.titleLabel.font=Mono(narrow?16:20,UIFontWeightMedium);
-    _logo.font=Mono(narrow?17:20,UIFontWeightSemibold);
-    _pgLabel.font=Mono(l.transportsInHeader?9:11);
 }
 - (void)configureNoteMenu {
     NSMutableArray<UIMenuElement*> *actions=[NSMutableArray new];
@@ -214,10 +237,11 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     NSInteger pg=[state[@"pg"] integerValue];
     NSDictionary *song=[self.unit songForProgram:pg];
     NSInteger selected=[state[@"selectedPC"] integerValue];
-    NSString *active=pg<0?@"ACTIVE —":[NSString stringWithFormat:@"ACTIVE PC %03ld%@",(long)pg,[state[@"estimated"] boolValue]?@" (estimé)":@""];
+    NSString *active=pg<0?@"ACTIVE —":[NSString stringWithFormat:@"ACTIVE PC %02ld%@",(long)pg+1,[state[@"estimated"] boolValue]?@" (estimé)":@""];
     NSString *pending=selected<0?@"":[NSString stringWithFormat:@" · SELECTED %02ld%@",(long)selected+1,[state[@"uncertain"] boolValue]?@" PHASE ?":@""];
     NSString *saved=song[@"pcMode"] && [song[@"pcMode"] intValue]>=0?[NSString stringWithFormat:@" · PC MODE %@",song[@"pcMode"]]:@"";
-    _pgLabel.text=[NSString stringWithFormat:@"%@%@%@",active,pending,saved];
+    _pgLabel.text=[NSString stringWithFormat:@"%@%@",active,pending];
+    _pcModeLabel.text=[saved stringByReplacingOccurrencesOfString:@" · " withString:@""];
     BOOL configured=pg>=0;
     _noteButton.enabled=configured;_songButton.enabled=configured;_bpmButton.enabled=configured;
     NSString *name=song[@"title"] ?: @"UNKNOWN";
@@ -251,15 +275,15 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
         self.bpmDragProgram=pg;
         double stored=[[self.unit currentSong][@"bpm"] doubleValue];
         double host=[[self.unit transportSnapshot][@"bpm"] doubleValue];
-        self.bpmDragStart=std::round(beat4::validBPM(stored)?stored:(beat4::validBPM(host)?host:128));
+        self.bpmDragStart=beat4::initialDraggedBPM(stored,host);
         self.bpmDragOriginX=0;
     }
-    if(pg!=self.bpmDragProgram)return;
+    if(pg!=self.bpmDragProgram){self.bpmDragging=NO;[self refreshSong];return;}
     if(gesture.state==UIGestureRecognizerStateChanged ||
        gesture.state==UIGestureRecognizerStateEnded){
         // Absolute displacement, not accumulated deltas: no runaway or drift.
         CGFloat dx=[gesture translationInView:self.view].x-self.bpmDragOriginX;
-        double target=std::clamp(self.bpmDragStart+std::round(dx/9.0),20.0,240.0);
+        double target=beat4::draggedBPM((int)self.bpmDragStart,dx);
         [_bpmButton setTitle:[NSString stringWithFormat:@"%.0f BPM",target] forState:UIControlStateNormal];
         if(gesture.state==UIGestureRecognizerStateEnded){
             [self.unit saveSongBPM:target];
@@ -309,7 +333,7 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     }]];[self presentViewController:a animated:YES completion:nil];
 }
 - (void)refreshPage {
-    self.canvas.showBars=self.page==0;[self.canvas setNeedsDisplay];
+    if(self.canvas.showBars!=(self.page==0)){self.canvas.showBars=self.page==0;[self.canvas setNeedsDisplay];}
     NSDictionary *state=self.frameSnapshot ?: [self.unit transportSnapshot];
     int active=[state[@"pg"] intValue],selected=[state[@"selectedPC"] intValue];
     for(int i=0;i<32;++i){
@@ -333,8 +357,13 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     [super viewDidDisappear:animated];[self.clock invalidate];self.clock=nil;
 }
 - (void)updateDisplay:(CADisplayLink*)link {
-    (void)link;
-    NSDictionary *data=[self.unit transportSnapshot];self.frameSnapshot=data;self.canvas.snapshot=data;
+    const CFTimeInterval now=link?link.timestamp:CACurrentMediaTime();
+    const uint64_t revision=[self.unit displayRevision];
+    const bool watchdog=self.lastWatchdog==0 || now-self.lastWatchdog>=.25;
+    if(link && !self.lastMoving && ![self.canvas lightsAnimating] && revision==self.seenRevision && !watchdog)return;
+    if(watchdog)self.lastWatchdog=now;
+    NSDictionary *data=[self.unit transportSnapshot];self.frameSnapshot=data;
+    if(!link || self.lastMoving || [data[@"moving"] boolValue] || [self.canvas lightsAnimating] || revision!=self.seenRevision)self.canvas.snapshot=data;
     NSInteger pg=[data[@"pg"] integerValue];
     if(pg!=self.seenPG){self.seenPG=pg;[self refreshSong];}
     BOOL synced=[data[@"synced"] boolValue];
@@ -348,5 +377,6 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     BOOL enabled=[data[@"kickEnabled"] boolValue];
     [_kickButton setTitleColor:enabled?RGB(177,225,164):RGB(110,120,111) forState:UIControlStateNormal];
     if(!_levelSlider.tracking)_levelSlider.value=[data[@"kickLevel"] floatValue];
+    self.lastMoving=moving;self.seenRevision=revision;
 }
 @end

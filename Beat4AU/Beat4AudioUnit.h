@@ -4,6 +4,7 @@ NS_ASSUME_NONNULL_BEGIN
 @interface Beat4AudioUnit : AUAudioUnit
 // Main-thread API. MIDI/render callback reads only realtime-safe atomics.
 - (NSDictionary<NSString *, NSNumber *> *)transportSnapshot;
+- (uint64_t)displayRevision;
 - (NSInteger)currentProgram;
 - (NSDictionary<NSString *, id> *)currentSong;
 - (void)saveSongTitle:(NSString *)title;

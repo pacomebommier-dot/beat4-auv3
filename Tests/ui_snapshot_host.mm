@@ -1,4 +1,5 @@
 #import <UIKit/UIKit.h>
+#import <AVFoundation/AVFoundation.h>
 #import "../Beat4AU/Beat4ViewController.h"
 #import "../Beat4AU/Beat4AudioUnit.h"
 #include <cassert>
@@ -67,7 +68,7 @@
     [vc updateDisplay:nil];
     NSArray<UIButton*> *pads=[vc valueForKey:@"pads"];assert(pads.count==32);
     UILabel *header=[vc valueForKey:@"pgLabel"];
-    assert([header.text containsString:@"ACTIVE PC 007"] && [header.text containsString:@"SELECTED 40"]);
+    assert([header.text containsString:@"ACTIVE PC 08"] && [header.text containsString:@"SELECTED 40"]);
     if(page>0){
      for(UIButton *pad in pads){
       int pc=(page-1)*32+(int)pad.tag;
@@ -96,6 +97,37 @@
   assert(messages.count==5 && [messages[3][@"bytes"] isEqual:playPress] && [messages[4][@"bytes"] isEqual:playRelease]);
   NSData *trace=[NSJSONSerialization dataWithJSONObject:@{@"host":@"SIMULATED",@"midiOutput":messages,@"journal":unit.diagnosticLog} options:NSJSONWritingPrettyPrinted error:&error];
   assert(trace && !error && [trace writeToFile:[directory stringByAppendingPathComponent:@"mock-host-midi-trace.json"] atomically:YES]);
+  // A host may query the block before negotiation and install callbacks after allocation.
+  Beat4AudioUnit *late=[[Beat4AudioUnit alloc]initWithComponentDescription:desc options:0 error:&error];
+  AUInternalRenderBlock lateRender=late.internalRenderBlock;
+  AVAudioFormat *format=[[AVAudioFormat alloc]initStandardFormatWithSampleRate:44100 channels:2];
+  assert([late.outputBusses[0] setFormat:format error:&error]);
+  assert([late allocateRenderResourcesAndReturnError:&error]);
+  late.musicalContextBlock=unit.musicalContextBlock;
+  late.transportStateBlock=unit.transportStateBlock;
+  late.MIDIOutputEventBlock=unit.MIDIOutputEventBlock;
+  [late transportSnapshot]; // refresh missing callbacks off the render thread
+  float lateSamples[256]={};AudioBufferList lateBuffers{};lateBuffers.mNumberBuffers=1;
+  lateBuffers.mBuffers[0]={2,sizeof(lateSamples),lateSamples};
+  AudioTimeStamp lateStamp{};lateStamp.mFlags=kAudioTimeStampSampleTimeValid;
+  AudioUnitRenderActionFlags lateFlags=kAudioUnitRenderAction_OutputIsSilence;
+  assert(lateRender(&lateFlags,&lateStamp,128,0,&lateBuffers,nullptr,nil)==noErr);
+  NSDictionary *lateSnapshot=late.transportSnapshot;
+  assert([lateSnapshot[@"synced"] boolValue]);
+  assert([lateSnapshot[@"renderSampleRate"] doubleValue]==44100);
+  assert(!(lateFlags&kAudioUnitRenderAction_OutputIsSilence));
+  [late deallocateRenderResources];
+  // A malformed successful callback must not be advertised as synchronized.
+  late.musicalContextBlock=^BOOL(double *tempo,double *num,NSInteger *den,double *position,NSInteger *offset,double *downbeat){
+   (void)offset;if(tempo)*tempo=128;if(num)*num=NAN;if(den)*den=4;
+   if(position)*position=INFINITY;if(downbeat)*downbeat=0;return YES;
+  };
+  assert([late allocateRenderResourcesAndReturnError:&error]);
+  lateStamp.mSampleTime=NAN;
+  assert(lateRender(&lateFlags,&lateStamp,128,0,&lateBuffers,nullptr,nil)==noErr);
+  assert(![late.transportSnapshot[@"synced"] boolValue]);
+  assert([late.transportSnapshot[@"invalidTimestamps"] unsignedLongLongValue]>0);
+  [late deallocateRenderResources];
   [@"PASS: 12 native UIKit renders, ACTIVE/SELECTED, grid colors and AUv3 MIDI anti-echo on simulated host\n" writeToFile:[directory stringByAppendingPathComponent:@"DONE.txt"] atomically:YES encoding:NSUTF8StringEncoding error:&error];
   assert(!error);[unit deallocateRenderResources];
  } @catch(NSException *exception){
