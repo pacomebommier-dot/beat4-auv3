@@ -47,7 +47,8 @@
    assert(render(&flags,&stamp,128,0,&buffers,input,nil)==noErr);
   };
   [unit selectProgram:7];tick();assert(unit.currentProgram==7 && messages.count==1);
-  assert([messages[0][@"cable"] intValue]==1 && [messages[0][@"bytes"] isEqual:@[@207,@7]]);
+  NSArray *expectedPC=@[@207,@7];
+  assert([messages[0][@"cable"] intValue]==1 && [messages[0][@"bytes"] isEqual:expectedPC]);
   [unit saveSongTitle:@"R10 NATIVE TEST"];[unit saveSongBPM:135];[unit saveSongSubNote:5];
   [unit setGlobalMode:1];[unit saveCurrentMode];
   moving=YES;beat=1;tick();[unit selectProgram:39];tick();
