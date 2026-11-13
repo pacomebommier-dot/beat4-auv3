@@ -20,5 +20,5 @@ int main(){
     assert(l.bars.y+l.bars.h <= l.kick.y);
     assert(l.kick.y+l.kick.h < l.bpm.y+4);
   }
-  std::cout<<"Responsive layout PASS: 8 iPhone/iPad sizes, visible bars and controls\n";
+  std::cout<<"Responsive layout PASS: 10 iPhone/iPad sizes, visible bars and controls\n";
 }

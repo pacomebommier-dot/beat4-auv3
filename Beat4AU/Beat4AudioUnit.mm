@@ -12,13 +12,13 @@
 #import "Beat4Songs.hpp"
 #import "Beat4Program.hpp"
 #import "Beat4Journal.hpp"
+#import "Beat4Store.h"
 #import "Beat4Kick.hpp"
 #import "Beat4BeatGate.hpp"
 
 namespace {
 constexpr AUParameterAddress kLevel = 0;
 constexpr AUParameterAddress kEnabled = 1;
-static NSString *const kSongStoreKey = @"beat4.songs.v2";
 struct State {
     std::atomic<uint64_t> sequence{0}, tick{0}, callbacks{0};
     std::atomic<double> beat{0}, bpm{0}, samplePosition{0}, bufferSeconds{0.005};
@@ -124,27 +124,14 @@ Snapshot load(const State& s) noexcept {
     _params.implementorValueProvider=^AUValue(AUParameter *parameter){
         return parameter.address==kLevel?s->kickLevel.load():(s->kickEnabled.load()?1.f:0.f);
     };
-    _songCache=[NSMutableDictionary new];
-    NSDictionary *saved=[[NSUserDefaults standardUserDefaults] dictionaryForKey:kSongStoreKey];
-    // Retain the raw v1 archive. Only unambiguous canonical lower slots migrate.
-    if(!saved) saved=[[NSUserDefaults standardUserDefaults] dictionaryForKey:@"beat4.songs.v1"];
-    s->globalMode.store((int)[[NSUserDefaults standardUserDefaults] integerForKey:@"beat4.globalMode"]);
-    [saved enumerateKeysAndObjectsUsingBlock:^(id key,id obj,BOOL *stop){
-        (void)stop;
-        int pg=[key intValue];
-        if(pg<0 || pg>=64 || ![obj isKindOfClass:NSDictionary.class])return;
-        NSDictionary *entry=(NSDictionary*)obj;
-        NSString* title=[entry[@"title"] isKindOfClass:NSString.class] ? entry[@"title"] : @"UNKNOWN";
-        double bpm=[entry[@"bpm"] doubleValue];
-        NSInteger note=entry[@"sub"] ? [entry[@"sub"] integerValue] : -1;
-        _songCache[key]=@{@"title":title, @"bpm":@(beat4::storedBPM(bpm)),
-                         @"sub":@(beat4::validSub((int)note)?note:-1),
-                         @"queue":@(beat4::storedQueue([entry[@"queue"] intValue])),
-                         @"pcMode":@(beat4::storedMode(entry[@"pcMode"]?[entry[@"pcMode"] intValue]:-1))};
-        s->queues[pg].store([_songCache[key][@"queue"] intValue]);
-        s->pcModes[pg].store([_songCache[key][@"pcMode"] intValue]);
-        s->tempos[pg].store(beat4::storedBPM(bpm));
-        s->notes[pg].store(beat4::validSub((int)note)?(int)note:-1);
+    _songCache=beat4::loadSongStore(NSUserDefaults.standardUserDefaults);
+    s->globalMode.store(std::clamp((int)[NSUserDefaults.standardUserDefaults integerForKey:@"beat4.globalMode"],0,2));
+    [_songCache enumerateKeysAndObjectsUsingBlock:^(NSString *key,NSDictionary *entry,BOOL *stop){
+        (void)stop;const int pc=key.intValue;
+        s->tempos[pc].store([entry[@"bpm"] doubleValue]);
+        s->notes[pc].store([entry[@"sub"] intValue]);
+        s->queues[pc].store([entry[@"queue"] intValue]);
+        s->pcModes[pc].store([entry[@"pcMode"] intValue]);
     }];
     return self;
 }
@@ -342,7 +329,7 @@ Snapshot load(const State& s) noexcept {
     if(!beat4::validProgram((int)pg))return;
     NSString *key=[NSString stringWithFormat:@"%ld",(long)pg];
     _songCache[key]=song;
-    [[NSUserDefaults standardUserDefaults] setObject:[_songCache copy] forKey:(NSString*)kSongStoreKey];
+    beat4::writeSongStore(NSUserDefaults.standardUserDefaults,[_songCache copy]);
     double bpm=[song[@"bpm"] doubleValue];
     NSInteger note=[song[@"sub"] integerValue];
     _state->tempos[pg].store(beat4::storedBPM(bpm));

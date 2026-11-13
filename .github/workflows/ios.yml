@@ -26,6 +26,10 @@ jobs:
     needs: core-tests
     steps:
       - uses: actions/checkout@v4
+      - name: Native persistence regression tests
+        run: |
+          clang++ -std=c++17 -fobjc-arc Tests/test_persistence.mm -framework Foundation -o "$RUNNER_TEMP/test_persistence"
+          "$RUNNER_TEMP/test_persistence"
       - name: Show build environment
         run: xcodebuild -version
       - name: Compile unsigned BEAT4 container and extension
