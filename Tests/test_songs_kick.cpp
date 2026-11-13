@@ -1,5 +1,6 @@
 #include "../Beat4AU/Beat4Songs.hpp"
 #include "../Beat4AU/Beat4Kick.hpp"
+#include "../Beat4AU/Beat4Display.hpp"
 #include <cassert>
 #include <cmath>
 #include <iostream>
@@ -21,11 +22,8 @@ int main(){
     assert(std::abs(pitchBend14(130)-8192)<=1);
     assert(pitchBend14(0)==-1);
     assert(pitchBend14(241)==-1);
-    assert(pulseBrightness(0.0)==0);
-    assert(pulseBrightness(0.38)>.99);
-    assert(pulseBrightness(0.50)>0.50);
-    assert(pulseBrightness(0.65)>0 && pulseBrightness(0.65)<0.05);
-    assert(pulseBrightness(0.68)==0);
+    assert(barBrightness(0,0,0)==1);
+    assert(barBrightness(0,0,.58)==0);
     KickVoice k; k.trigger();
     double peak=0;
     for(int i=0;i<24000;++i) {double s=k.process(48000.0,subFrequency(5)); assert(std::isfinite(s)); assert(std::abs(s)<1.0); peak=std::max(peak,std::abs(s));}

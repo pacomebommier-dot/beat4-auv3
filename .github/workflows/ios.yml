@@ -55,13 +55,13 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/Payload"
           cp -a "$RUNNER_TEMP/Beat4DerivedData/Build/Products/Release-iphoneos/BEAT4.app" "$RUNNER_TEMP/Payload/"
-          (cd "$RUNNER_TEMP" && zip -qry "$GITHUB_WORKSPACE/BEAT4_R10_V0_5_7_BUILD7_UNSIGNED.ipa" Payload)
-          python3 Tools/verify_ipa.py BEAT4_R10_V0_5_7_BUILD7_UNSIGNED.ipa --version 0.5.7 --build 7
-          shasum -a 256 BEAT4_R10_V0_5_7_BUILD7_UNSIGNED.ipa > BEAT4_R10_IPA_SHA256.txt
+          (cd "$RUNNER_TEMP" && zip -qry "$GITHUB_WORKSPACE/BEAT4_R10_V0_5_8_BUILD8_UNSIGNED.ipa" Payload)
+          python3 Tools/verify_ipa.py BEAT4_R10_V0_5_8_BUILD8_UNSIGNED.ipa --version 0.5.8 --build 8
+          shasum -a 256 BEAT4_R10_V0_5_8_BUILD8_UNSIGNED.ipa > BEAT4_R10_IPA_SHA256.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: BEAT4-R10-V0-5-7-UNSIGNED-IPA
+          name: BEAT4-R10-V0-5-8-UNSIGNED-IPA
           path: |
-            BEAT4_R10_V0_5_7_BUILD7_UNSIGNED.ipa
+            BEAT4_R10_V0_5_8_BUILD8_UNSIGNED.ipa
             BEAT4_R10_IPA_SHA256.txt
           if-no-files-found: error

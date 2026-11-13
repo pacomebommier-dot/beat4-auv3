@@ -1,0 +1,14 @@
+Beat4 core PASS: sequence, bars, negative beats, stop/hold, bounded prediction
+Beat4 transport memory PASS: play, pause, resume, rewind, at-zero ambiguity, missing sync
+Songs, PG channel, tempo encoding, sub tuning and kick: PASS
+Beat gate PASS: 3 true beats / 72000 samples, no per-buffer kicks, hold/resume, rewind
+Responsive layout PASS: 8 iPhone/iPad sizes, visible bars and controls
+V054 PASS: CC pulses, LED stop/pause/restart, sample gain ramps, kick seams
+Beat4 core PASS: sequence, bars, negative beats, stop/hold, bounded prediction
+Beat4 transport memory PASS: play, pause, resume, rewind, at-zero ambiguity, missing sync
+Songs, PG channel, tempo encoding, sub tuning and kick: PASS
+Beat gate PASS: 3 true beats / 72000 samples, no per-buffer kicks, hold/resume, rewind
+Responsive layout PASS: 8 iPhone/iPad sizes, visible bars and controls
+V054 PASS: CC pulses, LED stop/pause/restart, sample gain ramps, kick seams
+Version/plist PASS: 0.5.5 app + extension
+iOS native build NOT RUN: xcodebuild absent (run GitHub macOS CI).

@@ -15,12 +15,16 @@
 #import "Beat4Store.h"
 #import "Beat4Kick.hpp"
 #import "Beat4BeatGate.hpp"
+#import "Beat4AudioGain.hpp"
 
 namespace {
 constexpr AUParameterAddress kLevel = 0;
 constexpr AUParameterAddress kEnabled = 1;
 struct State {
-    std::atomic<uint64_t> sequence{0}, tick{0}, callbacks{0};
+    std::atomic<uint64_t> sequence{0}, tick{0}, callbacks{0}, revision{1};
+    std::atomic<double> sampleRate{48000};
+    std::atomic<int> localStop{0}, transportStatus{0};
+    std::atomic<uint64_t> invalidTimestamps{0};
     std::atomic<double> beat{0}, bpm{0}, samplePosition{0}, bufferSeconds{0.005};
     std::atomic<int> numerator{4}, denominator{4}, mode{0};
     std::atomic<bool> transportValid{false}, musicalValid{false}, moving{false}, transportChanged{false};
@@ -84,11 +88,14 @@ Snapshot load(const State& s) noexcept {
     std::shared_ptr<beat4::HostMemory> _hostMemory;
     std::shared_ptr<beat4::KickVoice> _kickVoice;
     std::shared_ptr<beat4::BeatGate> _beatGate;
+    std::shared_ptr<beat4::AudioGain> _audioGain;
+    NSMutableArray *_hostCallbackKeepalive;
     AUHostTransportStateBlock _cachedTransport;
     AUHostMusicalContextBlock _cachedMusical;
     AUMIDIOutputEventBlock _cachedMIDIOutput;
     NSMutableDictionary<NSString*,NSDictionary*> *_songCache; // UI thread only
 }
+- (void)refreshHostCallbacks:(BOOL)replace;
 @end
 
 @implementation Beat4AudioUnit
@@ -102,6 +109,8 @@ Snapshot load(const State& s) noexcept {
     _hostMemory=std::make_shared<beat4::HostMemory>();
     _kickVoice=std::make_shared<beat4::KickVoice>();
     _beatGate=std::make_shared<beat4::BeatGate>();
+    _audioGain=std::make_shared<beat4::AudioGain>();
+    _hostCallbackKeepalive=[NSMutableArray new];
     AVAudioFormat* format=[[AVAudioFormat alloc] initStandardFormatWithSampleRate:48000 channels:2];
     _output=[[AUAudioUnitBus alloc]initWithFormat:format error:outError];
     if(!_output)return nil;
@@ -119,8 +128,8 @@ Snapshot load(const State& s) noexcept {
     _params=[AUParameterTree createTreeWithChildren:@[_levelParameter,_enabledParameter]];
     std::shared_ptr<State> s=_state;
     _params.implementorValueObserver=^(AUParameter *parameter,AUValue value){
-        if(parameter.address==kLevel)s->kickLevel.store(std::fmax(0.f,std::fmin(1.f,value)));
-        else if(parameter.address==kEnabled)s->kickEnabled.store(value>=.5f);
+        if(parameter.address==kLevel){s->kickLevel.store(std::fmax(0.f,std::fmin(1.f,value)));s->revision.fetch_add(1);}
+        else if(parameter.address==kEnabled){s->kickEnabled.store(value>=.5f);s->revision.fetch_add(1);}
     };
     _params.implementorValueProvider=^AUValue(AUParameter *parameter){
         return parameter.address==kLevel?s->kickLevel.load():(s->kickEnabled.load()?1.f:0.f);
@@ -136,6 +145,16 @@ Snapshot load(const State& s) noexcept {
     }];
     return self;
 }
+// Host installation is independent of editor visibility. Publish only off render.
+- (void)setTransportStateBlock:(AUHostTransportStateBlock)block {
+    [super setTransportStateBlock:block];[self refreshHostCallbacks:YES];
+}
+- (void)setMusicalContextBlock:(AUHostMusicalContextBlock)block {
+    [super setMusicalContextBlock:block];[self refreshHostCallbacks:YES];
+}
+- (void)setMIDIOutputEventBlock:(AUMIDIOutputEventBlock)block {
+    [super setMIDIOutputEventBlock:block];[self refreshHostCallbacks:YES];
+}
 - (AUParameterTree *)parameterTree {return _params;}
 - (AUAudioUnitBusArray *)inputBusses {return _inputs;}
 - (AUAudioUnitBusArray *)outputBusses {return _outputs;}
@@ -143,22 +162,44 @@ Snapshot load(const State& s) noexcept {
 - (NSInteger)virtualMIDICableCount {return 2;}
 - (BOOL)allocateRenderResourcesAndReturnError:(NSError * _Nullable __autoreleasing *)outError {
     if(![super allocateRenderResourcesAndReturnError:outError])return NO;
-    _cachedTransport=[self.transportStateBlock copy];
-    _cachedMusical=[self.musicalContextBlock copy];
-    _cachedMIDIOutput=[self.MIDIOutputEventBlock copy];
-    _hostHooks->transport.store((__bridge void *)_cachedTransport,std::memory_order_release);
-    _hostHooks->musical.store((__bridge void *)_cachedMusical,std::memory_order_release);
-    _hostHooks->midiOut.store((__bridge void *)_cachedMIDIOutput,std::memory_order_release);
-    _state->midiOutputConfigured.store(_cachedMIDIOutput != nil);
+    _state->sampleRate.store(_output.format.sampleRate);
+    _hostMemory->reset();_kickVoice->reset();_beatGate->reset();_audioGain->reset();
+    // Preserve the observed project, but invalidate pending phase and ramp on reallocation.
+    const int active=_state->engine.active;
+    _state->engine=beat4::ProgramEngine{};_state->engine.active=active;
+    _state->transportPulse=beat4::TransportPulse{};_state->lastTempoSent=0;
+    _state->callbacks.store(0);_state->tick.store(0);_state->selectedPC.store(-1);
+    _state->uncertain.store(false);_state->localStop.store(0);
+    [self refreshHostCallbacks:YES];
     return YES;
+}
+- (void)refreshHostCallbacks:(BOOL)replace {
+    if(!self.renderResourcesAllocated)return;
+    @synchronized(self){
+        AUHostTransportStateBlock transport=_cachedTransport;
+        AUHostMusicalContextBlock musical=_cachedMusical;
+        AUMIDIOutputEventBlock midi=_cachedMIDIOutput;
+        if(replace || !transport)transport=[self.transportStateBlock copy];
+        if(replace || !musical)musical=[self.musicalContextBlock copy];
+        if(replace || !midi)midi=[self.MIDIOutputEventBlock copy];
+        if(transport && transport!=_cachedTransport)[_hostCallbackKeepalive addObject:transport];
+        if(musical && musical!=_cachedMusical)[_hostCallbackKeepalive addObject:musical];
+        if(midi && midi!=_cachedMIDIOutput)[_hostCallbackKeepalive addObject:midi];
+        _cachedTransport=transport;_cachedMusical=musical;_cachedMIDIOutput=midi;
+        _hostHooks->transport.store((__bridge void*)transport,std::memory_order_release);
+        _hostHooks->musical.store((__bridge void*)musical,std::memory_order_release);
+        _hostHooks->midiOut.store((__bridge void*)midi,std::memory_order_release);
+        _state->midiOutputConfigured.store(midi!=nil);
+    }
 }
 - (void)deallocateRenderResources {
     _hostHooks->transport.store(nullptr,std::memory_order_release);
     _hostHooks->musical.store(nullptr,std::memory_order_release);
     _hostHooks->midiOut.store(nullptr,std::memory_order_release);
     [super deallocateRenderResources];
-    _cachedTransport=nil; _cachedMusical=nil; _cachedMIDIOutput=nil;
-    _state->midiOutputConfigured.store(false);
+    _cachedTransport=nil;_cachedMusical=nil;_cachedMIDIOutput=nil;
+    [_hostCallbackKeepalive removeAllObjects];
+    _state->midiOutputConfigured.store(false);_state->revision.fetch_add(1);
 }
 - (AUInternalRenderBlock)internalRenderBlock {
     const std::shared_ptr<State> shared=_state;
@@ -166,25 +207,32 @@ Snapshot load(const State& s) noexcept {
     const std::shared_ptr<beat4::KickVoice> voice=_kickVoice;
     const std::shared_ptr<beat4::BeatGate> gate=_beatGate;
     const std::shared_ptr<HostHooks> hooks=_hostHooks;
-    const double sampleRate=_output.format.sampleRate;
+    const auto gain=_audioGain;
     return ^AUAudioUnitStatus(AudioUnitRenderActionFlags *actionFlags,
          const AudioTimeStamp *timestamp, AVAudioFrameCount frameCount, NSInteger outputBusNumber,
          AudioBufferList *outputData, const AURenderEvent *events, AURenderPullInputBlock pullInput) {
-        (void)actionFlags;(void)outputBusNumber;(void)pullInput;
+        (void)outputBusNumber;(void)pullInput;
         State *s=shared.get();
+        const double sampleRate=s->sampleRate.load();
         // Resolve callbacks when rendering, not when the host first queries the
         // block. The backing blocks remain retained in the AU while allocated.
         const AUHostTransportStateBlock transport=(__bridge AUHostTransportStateBlock)hooks->transport.load(std::memory_order_acquire);
         const AUHostMusicalContextBlock musical=(__bridge AUHostMusicalContextBlock)hooks->musical.load(std::memory_order_acquire);
         const AUMIDIOutputEventBlock midiOut=(__bridge AUMIDIOutputEventBlock)hooks->midiOut.load(std::memory_order_acquire);
-        const auto sampleTime=(timestamp && (timestamp->mFlags & kAudioTimeStampSampleTimeValid))
-            ? static_cast<AUEventSampleTime>(timestamp->mSampleTime) : AUEventSampleTimeImmediate;
+        const bool validTime=timestamp && (timestamp->mFlags & kAudioTimeStampSampleTimeValid) &&
+            std::isfinite(timestamp->mSampleTime) && std::abs(timestamp->mSampleTime)<9e15;
+        if(!validTime)s->invalidTimestamps.fetch_add(1);
+        const auto sampleTime=validTime?static_cast<AUEventSampleTime>(timestamp->mSampleTime):AUEventSampleTimeImmediate;
         AUHostTransportStateFlags flags=(AUHostTransportStateFlags)0;
         double sample=0;
-        const bool transportOK=transport!=nil && transport(&flags,&sample,nullptr,nullptr);
+        const bool transportReturned=transport!=nil && transport(&flags,&sample,nullptr,nullptr);
+        const bool transportOK=transportReturned && std::isfinite(sample);
         double tempo=0,beatsPerBar=4,beat=0,barStart=0;
         NSInteger denominator=4;
-        const bool musicalOK=musical!=nil && musical(&tempo,&beatsPerBar,&denominator,&beat,nullptr,&barStart);
+        const bool musicalReturned=musical!=nil && musical(&tempo,&beatsPerBar,&denominator,&beat,nullptr,&barStart);
+        const bool musicalOK=musicalReturned && std::isfinite(tempo) && tempo>0 &&
+            std::isfinite(beat) && std::abs(beat)<1e10 && std::isfinite(beatsPerBar) &&
+            beatsPerBar>0 && beatsPerBar<=128 && denominator>0 && denominator<=128;
         const bool moving=transportOK && (flags & AUHostTransportStateMoving);
         const bool changed=transportOK && (flags & AUHostTransportStateChanged);
         const auto mode=memory->observe({transportOK,musicalOK,moving,changed,beat,sample});
@@ -222,9 +270,9 @@ Snapshot load(const State& s) noexcept {
                 // AUM may schedule automation/MIDI Learn as realtime parameter events,
                 // bypassing the UI-side AUParameter value observer.
                 if(e->parameter.parameterAddress==kLevel)
-                    s->kickLevel.store(std::fmax(0.f,std::fmin(1.f,e->parameter.value)));
+                    {s->kickLevel.store(std::fmax(0.f,std::fmin(1.f,e->parameter.value)));s->revision.fetch_add(1);}
                 else if(e->parameter.parameterAddress==kEnabled)
-                    s->kickEnabled.store(e->parameter.value>=.5f);
+                    {s->kickEnabled.store(e->parameter.value>=.5f);s->revision.fetch_add(1);}
                 continue;
             }
             if(e->head.eventType!=AURenderEventMIDI || e->MIDI.length<2)continue;
@@ -244,8 +292,14 @@ Snapshot load(const State& s) noexcept {
         if(request>=0)s->transportPulse.request(moving);
         if(midiOut){
             const auto message=s->transportPulse.next();
-            if(message.length)midiOut(sampleTime,message.cable,message.length,message.bytes.data());
+            if(message.length){
+                const auto status=midiOut(sampleTime,message.cable,message.length,message.bytes.data());
+                s->transportStatus.store(status);
+                if(status!=noErr)s->journal.write(6,s->engine.active,3,beat);
+                if(status==noErr && message.bytes[2]==127)s->localStop.store(message.bytes[1]==111);
+            }
         }
+        if(moving && !s->moving.load())s->localStop.store(0);
         const bool canPlay=moving && musicalOK && sampleRate>0 && std::isfinite(beat) &&
                 std::isfinite(tempo) && tempo>0 && beatsPerBar==4 && denominator==4;
         const bool on=s->kickEnabled.load(std::memory_order_relaxed);
@@ -253,16 +307,16 @@ Snapshot load(const State& s) noexcept {
         int pg=s->engine.active;
         int pitch=beat4::validProgram(pg)?s->notes[pg].load(std::memory_order_relaxed):-1;
         const double subHz=beat4::subFrequency(pitch);
-        if(!canPlay || !on)voice->reset();
+
         // The gate preserves the last triggered quarter-note across render buffers.
         // Visuals and sound use the same host musical position, with no free-running clock.
-        gate->prepare(beat,tempo,sampleRate,frameCount,canPlay);
+        gate->prepare(beat,tempo,sampleRate,frameCount,canPlay&&on);
+        if(actionFlags)*actionFlags &= ~kAudioUnitRenderAction_OutputIsSilence;
         for(AVAudioFrameCount i=0;i<frameCount;++i){
-            double v=0;
-            if(canPlay && on){
-                if(gate->atSample(i))voice->trigger();
-                v=voice->process(sampleRate,subHz)*level*0.70;
-            }
+            const bool playing=canPlay&&on;
+            if(playing && gate->atSample(i))voice->trigger();
+            const double v=voice->process(sampleRate,subHz)*gain->next(playing,level,sampleRate)*0.70;
+            if(!playing && gain->silent())voice->reset();
             if(outputData){
                 if(outputData->mNumberBuffers>=2){
                     for(UInt32 b=0;b<2;++b){
@@ -278,6 +332,12 @@ Snapshot load(const State& s) noexcept {
                 }
             }
         }
+        const bool visibleChanged=s->currentPG.load()!=s->engine.active ||
+            s->selectedPC.load()!=s->engine.selected || s->uncertain.load()!=s->engine.uncertain ||
+            s->estimated.load()!=s->engine.estimated || s->moving.load()!=moving ||
+            s->mode.load()!=(int)mode || s->transportValid.load()!=transportOK ||
+            s->musicalValid.load()!=musicalOK || s->bpm.load()!=tempo;
+        if(visibleChanged)s->revision.fetch_add(1);
         s->sequence.fetch_add(1,std::memory_order_acq_rel);
         s->currentPG.store(s->engine.active);
         s->selectedPC.store(s->engine.selected);
@@ -288,8 +348,8 @@ Snapshot load(const State& s) noexcept {
         s->bpm.store(tempo,std::memory_order_relaxed);
         s->samplePosition.store(sample,std::memory_order_relaxed);
         s->bufferSeconds.store(sampleRate>0?frameCount/sampleRate:0,std::memory_order_relaxed);
-        s->numerator.store((int)beatsPerBar,std::memory_order_relaxed);
-        s->denominator.store((int)denominator,std::memory_order_relaxed);
+        s->numerator.store(musicalOK?(int)beatsPerBar:4,std::memory_order_relaxed);
+        s->denominator.store(musicalOK?(int)denominator:4,std::memory_order_relaxed);
         s->moving.store(moving,std::memory_order_relaxed);
         s->mode.store((int)mode,std::memory_order_relaxed);
         s->transportChanged.store(changed,std::memory_order_relaxed);
@@ -300,7 +360,9 @@ Snapshot load(const State& s) noexcept {
         return noErr;
     };
 }
+- (uint64_t)displayRevision {return _state->revision.load();}
 - (NSDictionary<NSString*,NSNumber*>*)transportSnapshot {
+    [self refreshHostCallbacks:NO];
     const Snapshot s=load(*_state);
     mach_timebase_info_data_t info{};mach_timebase_info(&info);
     const uint64_t now=mach_absolute_time();
@@ -309,7 +371,8 @@ Snapshot load(const State& s) noexcept {
     const bool fresh=s.callbacks>0 && age<.25;
     const bool synced=fresh && s.transportValid && s.musicalValid && std::isfinite(s.bpm) && s.bpm>0;
     const double projected=synced?beat4::displayBeat(s.beat,s.bpm,s.moving,age,s.bufferSeconds):s.beat;
-    const auto d=beat4::project(projected,s.samplePosition,s.moving);
+    const double safeBeat=std::isfinite(projected) && std::abs(projected)<1e10?projected:0;
+    const auto d=beat4::project(safeBeat,s.samplePosition,s.moving);
     return @{@"hasRender":@(fresh),@"synced":@(synced),@"moving":@(s.moving),
              @"mode":@(s.mode),@"active":@(d.cell),@"fraction":@(d.fractional),
              @"bpm":@(s.bpm),@"bar":@(d.bar),@"numerator":@(s.numerator),
@@ -317,7 +380,11 @@ Snapshot load(const State& s) noexcept {
              @"kickEnabled":@(_state->kickEnabled.load()),@"kickLevel":@(_state->kickLevel.load()),
              @"midiOut":@(_state->midiOutputConfigured.load()),
              @"selectedPC":@(s.selected),@"uncertain":@(s.uncertain),@"estimated":@(s.estimated),
-             @"globalMode":@(_state->globalMode.load())};
+             @"globalMode":@(_state->globalMode.load()),@"displayBeat":@(projected),
+             @"localStop":@(_state->localStop.load()),@"transportStatus":@(_state->transportStatus.load()),
+             @"invalidTimestamps":@(_state->invalidTimestamps.load()),@"renderAge":@(age),@"renderSampleRate":@(_state->sampleRate.load()),
+             @"transportCallback":@(_cachedTransport!=nil),@"musicalCallback":@(_cachedMusical!=nil),
+             @"transportValid":@(s.transportValid),@"musicalValid":@(s.musicalValid)};
 }
 - (NSArray*)diagnosticLog {
     NSMutableArray *result=[NSMutableArray new];
@@ -333,7 +400,7 @@ Snapshot load(const State& s) noexcept {
 - (void)persistSong:(NSDictionary*)song program:(NSInteger)pg {
     if(!beat4::validProgram((int)pg))return;
     NSString *key=[NSString stringWithFormat:@"%ld",(long)pg];
-    _songCache[key]=song;
+    _songCache[key]=song;_state->revision.fetch_add(1);
     beat4::writeSongStore(NSUserDefaults.standardUserDefaults,[_songCache copy]);
     double bpm=[song[@"bpm"] doubleValue];
     NSInteger note=[song[@"sub"] integerValue];
@@ -349,11 +416,11 @@ Snapshot load(const State& s) noexcept {
     entry[@"title"]=clean.length?clean:@"UNKNOWN";
     [self persistSong:entry program:pg];
 }
-- (void)saveSongBPM:(double)bpm {
-    NSInteger pg=[self currentProgram];
-    if(!beat4::validProgram((int)pg)||!beat4::validBPM(bpm))return;
-    NSMutableDictionary *entry=[[self currentSong] mutableCopy];entry[@"bpm"]=@(std::round(bpm));
-    [self persistSong:entry program:pg];
+- (void)saveSongBPM:(double)bpm { [self saveSongBPM:bpm program:[self currentProgram]]; }
+- (void)saveSongBPM:(double)bpm program:(NSInteger)pg {
+    if(pg<0 || pg>=64 || !beat4::validBPM(bpm))return;
+    NSMutableDictionary *entry=[[self songForProgram:pg] mutableCopy];
+    entry[@"bpm"]=@(std::round(bpm));[self persistSong:entry program:pg];
 }
 - (void)saveSongSubNote:(NSInteger)note {
     NSInteger pg=[self currentProgram];
@@ -363,7 +430,7 @@ Snapshot load(const State& s) noexcept {
 }
 - (void)setKickLevel:(float)level {float clamped=std::fmax(0.f,std::fmin(1.f,level));_state->kickLevel.store(clamped);_levelParameter.value=clamped;}
 - (void)setKickEnabled:(BOOL)enabled {_state->kickEnabled.store(enabled);_enabledParameter.value=enabled?1:0;}
-- (void)requestTransportToggle { _state->transportRequest.store(1); }
+- (void)requestTransportToggle { [self refreshHostCallbacks:YES];_state->transportRequest.store(1); }
 - (void)selectProgram:(NSInteger)pc {if(pc>=0 && pc<64)_state->localPC.store((int)pc);}
 - (void)setGlobalMode:(NSInteger)mode {
     if(mode<0 || mode>2)return;

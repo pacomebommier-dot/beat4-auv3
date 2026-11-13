@@ -1,17 +1,26 @@
 #pragma once
 #include <cmath>
 #include <algorithm>
+#include <cstddef>
+#include <cstdint>
 
 namespace beat4 {
+inline std::size_t audioBytesForFrames(std::uint32_t frames,std::uint32_t channels,
+                                       std::size_t capacity) noexcept {
+    const std::size_t wanted=static_cast<std::size_t>(frames)*
+        static_cast<std::size_t>(std::max<std::uint32_t>(channels,1))*sizeof(float);
+    return std::min(wanted,capacity);
+}
 // Stateless pitch class mapping + inexpensive stateful kick synthesizer.
 // Attack transient is FIXED: only the sustained sub tail is tuned per song.
 class KickVoice {
 public:
     void reset() noexcept {
         age_ = 1.0; bodyPhase_ = transientPhase_ = 0;
-        hp_ = previous_ = 0;
+        hp_ = previous_ = lastOutput_ = retriggerTail_ = 0;
     }
     void trigger() noexcept {
+        retriggerTail_ = lastOutput_;
         age_ = 0; bodyPhase_ = transientPhase_ = 0;
         hp_ = previous_ = 0;
     }
@@ -35,29 +44,19 @@ public:
         // adding a sharp, click-like sample. Final DC block protects the mix.
         const double punch = 0.07 * (std::exp(-t/0.005) - std::exp(-t/0.0015));
         const double drive = 0.70 * std::tanh((body + attack + punch) * 1.36);
-        const double out = drive - previous_ + 0.9978 * hp_;
+        double out = drive - previous_ + 0.9978 * hp_;
         previous_ = drive;
         hp_ = out;
+        // Blend a still-ringing voice into the new attack over 5 ms.
+        if(t<.005){const double x=t/.005;out+=retriggerTail_*(1-x)*(1-x);}
+        // Reach actual zero before the hard lifetime boundary.
+        if(t>.730){const double x=std::clamp((.750-t)/.020,0.,1.);out*=x*x*(3-2*x);}
         age_ += 1.0 / sampleRate;
+        lastOutput_=out;
         return out;
     }
 private:
     double bodyPhase_ = 0, transientPhase_ = 0;
-    double age_ = 1, hp_ = 0, previous_ = 0;
+    double age_ = 1, hp_ = 0, previous_ = 0, lastOutput_ = 0, retriggerTail_ = 0;
 };
-inline double pulseBrightness(double fraction) noexcept {
-    if (!(fraction >= 0 && fraction <= 1)) return 0;
-    // Phosphor: slower attack, quicker but continuous decay with zero slope
-    // at both ends. A longer tail avoids an abrupt switch-off.
-    if (fraction < 0.38) {
-        const double x = fraction / 0.38;
-        return x*x*(3.0-2.0*x);
-    }
-    if (fraction < 0.68) {
-        const double x = (fraction-0.38)/0.30;
-        const double smooth=x*x*(3.0-2.0*x);
-        return 1.0-smooth;
-    }
-    return 0;
-}
 }

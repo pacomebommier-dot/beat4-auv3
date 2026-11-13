@@ -15,10 +15,11 @@ int main(){
     for(int i=0;i<32;++i){auto p=beat4::programPad(l.bars,i);assert(inside(p,w,h));assert(p.w>0 && p.h>0);}
     assert(l.queue.y+l.queue.h<=l.bpm.y);
     assert(l.toggle.x+l.toggle.w<=w-l.logo.x+.01);
-    assert(l.toggle.x>w*.7);
+    assert(l.toggle.x<l.song.x);
     assert(l.bars.h>=24 && l.bars.w>=100);
     assert(l.bars.y+l.bars.h <= l.kick.y);
     assert(l.kick.y+l.kick.h < l.bpm.y+4);
+    if(l.portrait)assert(l.levelLabel.y>l.kick.y);
   }
   std::cout<<"Responsive layout PASS: 10 iPhone/iPad sizes, visible bars and controls\n";
 }
