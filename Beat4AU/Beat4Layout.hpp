@@ -4,6 +4,11 @@
 #include <cmath>
 namespace beat4 {
 struct Rect {double x=0,y=0,w=0,h=0;};
+inline int nextPage(int page,int direction) noexcept {return (page+direction+3)%3;}
+inline Rect programPad(Rect area,int index) noexcept {
+    const double gap=4;const double w=(area.w-7*gap)/8,h=(area.h-3*gap)/4;
+    return {area.x+(index%8)*(w+gap),area.y+(index/8)*(h+gap),w,h};
+}
 struct Layout {
     Rect logo, host, pg, bars, kick, subLabel, subValue, levelLabel, levelSlider;
     Rect song, bpm, play, pause, stop;
