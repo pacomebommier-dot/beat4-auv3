@@ -214,7 +214,7 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     NSInteger pg=[state[@"pg"] integerValue];
     NSDictionary *song=[self.unit songForProgram:pg];
     NSInteger selected=[state[@"selectedPC"] integerValue];
-    NSString *active=pg<0?@"ACTIVE —":[NSString stringWithFormat:@"ACTIVE PC %03ld",(long)pg];
+    NSString *active=pg<0?@"ACTIVE —":[NSString stringWithFormat:@"ACTIVE PC %03ld%@",(long)pg,[state[@"estimated"] boolValue]?@" (estimé)":@""];
     NSString *pending=selected<0?@"":[NSString stringWithFormat:@" · SELECTED %02ld%@",(long)selected+1,[state[@"uncertain"] boolValue]?@" PHASE ?":@""];
     NSString *saved=song[@"pcMode"] && [song[@"pcMode"] intValue]>=0?[NSString stringWithFormat:@" · PC MODE %@",song[@"pcMode"]]:@"";
     _pgLabel.text=[NSString stringWithFormat:@"%@%@%@",active,pending,saved];

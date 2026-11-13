@@ -31,7 +31,7 @@ struct State {
     std::atomic<bool> kickEnabled{false}; // OFF at first boot: no surprising audio.
     std::array<std::atomic<int>,128> queues, pcModes;
     std::atomic<int> globalMode{0}, localPC{-1}, selectedPC{-1}, transportRequest{-1};
-    std::atomic<bool> uncertain{false};
+    std::atomic<bool> uncertain{false},estimated{false};
     beat4::Journal journal;
     beat4::ProgramEngine engine; // render thread owns this state
     beat4::ProgramMemory memories;
@@ -50,7 +50,7 @@ struct Snapshot {
     uint64_t tick, callbacks;
     double beat, bpm, samplePosition, bufferSeconds;
     int numerator, denominator, mode, pg, selected;
-    bool uncertain;
+    bool uncertain,estimated;
     bool transportValid, musicalValid, moving, transportChanged;
 };
 Snapshot load(const State& s) noexcept {
@@ -62,7 +62,7 @@ Snapshot load(const State& s) noexcept {
                 s.beat.load(std::memory_order_relaxed), s.bpm.load(std::memory_order_relaxed),
                 s.samplePosition.load(std::memory_order_relaxed), s.bufferSeconds.load(std::memory_order_relaxed),
                 s.numerator.load(std::memory_order_relaxed), s.denominator.load(std::memory_order_relaxed),
-                s.mode.load(std::memory_order_relaxed), s.currentPG.load(),s.selectedPC.load(),s.uncertain.load(), s.transportValid.load(std::memory_order_relaxed),
+                s.mode.load(std::memory_order_relaxed), s.currentPG.load(),s.selectedPC.load(),s.uncertain.load(),s.estimated.load(), s.transportValid.load(std::memory_order_relaxed),
                 s.musicalValid.load(std::memory_order_relaxed), s.moving.load(std::memory_order_relaxed),
                 s.transportChanged.load(std::memory_order_relaxed)};
         const auto b=s.sequence.load(std::memory_order_acquire);
@@ -210,13 +210,16 @@ Snapshot load(const State& s) noexcept {
             s->memories.mode[i]=s->pcModes[i].load();
         }
         s->memories.globalMode=std::clamp(s->globalMode.load(),0,2);
+        int previousActive=s->engine.active;
         auto apply=[&](beat4::ProgramAction a){
             if(a.activated>=0)s->journal.write(3,a.activated,a.sendPC?1:0,beat);
-            if(a.sendPC && midiOut){
+            if(a.sendPC){
+                if(!midiOut){s->journal.write(6,a.activated,1,beat);s->engine.outputFailed(previousActive,a.activated);return;}
                 // Immediate PC at our boundary, avoiding a second native Circuit queue.
                 auto message=beat4::circuitMessage(a.activated);
                 const auto status=midiOut(sampleTime,message.cable,message.length,message.bytes.data());
                 s->journal.write(status==noErr?4:6,a.activated,1,beat);
+                if(status!=noErr){s->engine.outputFailed(previousActive,a.activated);return;}
             }
             if(midiOut && beat4::shouldEmitTempo(a,s->lastTempoSent)){
                 auto message=beat4::tempoMessage(a.tempo);
@@ -287,6 +290,7 @@ Snapshot load(const State& s) noexcept {
         s->currentPG.store(s->engine.active);
         s->selectedPC.store(s->engine.selected);
         s->uncertain.store(s->engine.uncertain);
+        s->estimated.store(s->engine.estimated);
         s->tick.store(mach_absolute_time(),std::memory_order_relaxed);
         s->beat.store(beat,std::memory_order_relaxed);
         s->bpm.store(tempo,std::memory_order_relaxed);
@@ -320,7 +324,7 @@ Snapshot load(const State& s) noexcept {
              @"denominator":@(s.denominator),@"pg":@(s.pg),
              @"kickEnabled":@(_state->kickEnabled.load()),@"kickLevel":@(_state->kickLevel.load()),
              @"midiOut":@(_state->midiOutputConfigured.load()),
-             @"selectedPC":@(s.selected),@"uncertain":@(s.uncertain),
+             @"selectedPC":@(s.selected),@"uncertain":@(s.uncertain),@"estimated":@(s.estimated),
              @"globalMode":@(_state->globalMode.load())};
 }
 - (NSArray*)diagnosticLog {
