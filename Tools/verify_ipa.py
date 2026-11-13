@@ -39,4 +39,4 @@ if __name__ == '__main__':
     args = parser.parse_args()
     verify(args.package, args.version, args.build)
     with open(args.package, 'rb') as stream:
-        print('SHA256', hashlib.file_digest(stream, 'sha256').hexdigest())
+        print('SHA256', hashlib.sha256(stream.read()).hexdigest())

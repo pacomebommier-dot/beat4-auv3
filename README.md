@@ -2,7 +2,7 @@
 
 Instrument AUv3 pour AUM, conservant le moteur KICK/SUB/LEVEL et les quatre barres du projet existant.
 
-**Livraison source de développement. Aucune validation matérielle AUM/Circuit ni IPA distribuable annoncée.**
+**Version de test R10 : 0.5.7 build 7. IPA non signée produite selon la procédure habituelle des livraisons V0.5.6 ; validation matérielle AUM/Circuit encore ouverte.**
 
 Le [contrat consolidé R10](docs/r10/01_CONTRAT_CONSOLIDE_R10.md) est prioritaire. Les règles BPM/MODE du [contrat V08](docs/r10/01_CONTRAT_PC_TEMPO_FIX_V08.md) restent applicables au moment de l’activation effective du PC.
 
@@ -32,6 +32,6 @@ BEAT4_SANITIZE=1 bash Tests/run.sh
 
 Neuf exécutables C++ couvrent PC/QUEUE, tempo/MODE, octets MIDI, validation des mémoires, journal, transport, audio et géométrie. Les contrôles géométriques ne sont pas des captures UIKit.
 
-Sur Mac : ouvrir `Beat4.xcodeproj`, schéma `Beat4App`, configurer les identifiants et la signature de l’app et de l’extension. Le workflow iOS sur runner Intel compile sans signature, exécute le test natif `Tests/test_persistence.mm` et produit douze captures UIKit avec assertions d’état/couleurs et trace MIDI sur hôte simulé (`Tests/native_snapshots.sh`). Il ne fabrique pas d’IPA avant la recette requise.
+Sur Mac : ouvrir `Beat4.xcodeproj`, schéma `Beat4App`, configurer les identifiants et la signature de l’app et de l’extension. Le workflow iOS sur runner Intel compile sans signature, exécute le test natif `Tests/test_persistence.mm` et produit douze captures UIKit avec assertions d’état/couleurs et trace MIDI sur hôte simulé (`Tests/native_snapshots.sh`). Après ces contrôles, il emballe une IPA non signée et vérifie les versions, identifiants et exécutables arm64 de l’application et de son extension. Le fichier sert à la procédure habituelle de signature/installation de test.
 
 Les mémoires v2 sont enregistrées dans les préférences de l’extension. L’archive v1 est conservée ; les anciennes entrées brutes 64–127 ne sont pas fusionnées arbitrairement. Historique de l’ancien fonctionnement : [README V05 archivé](docs/archive/README_V05.md).

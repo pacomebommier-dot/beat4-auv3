@@ -96,3 +96,9 @@ Le téléchargement des PNG depuis le stockage GitHub Azure reste refusé par le
 Les erreurs de compilation du harness (capture `__block` par lambda puis liaison CoreGraphics manquante) ont été corrigées. Aucun changement au code musical de production depuis la livraison `9ba8524` durant cette reprise : seuls CI, tests et documentation ont changé. Les différences d’un éventuel commit final de documentation avec `8b2253c` sont vérifiables par `git diff` ; les fichiers de code/build/tests sont identiques.
 
 AUM/Circuit physiques, signature Apple et IPA restent non réalisés. Aucun PASS matériel ni confirmation de phase Circuit ajouté.
+
+## Reprise de la livraison IPA habituelle
+
+À la demande explicite de l’utilisateur (« on faisait ça à l’arrache avant, regarde les précédents »), reprise de la méthode de la livraison V0.5.6 : construire puis livrer une **IPA non signée à signer avec la procédure habituelle**, sans exiger une nouvelle configuration Apple dans cette session. Cette demande remplace le report du packaging jusqu’à recette matérielle. Elle ne transforme aucun test matériel en PASS.
+
+Référence retrouvée : `3f18d0042c03ed0ff389ab46731141e1024fa5ca`, run `43318936011`, IPA V0.5.6 build6 et contrôle des deux plists. Nouvelle version : **0.5.7 build 7** dans l’application et l’extension, identifiants conservés. Packaging placé après les tests et le build ; contrôle bloquant de la structure Payload, des deux versions, des identifiants et des exécutables Mach-O arm64. Résultat de la nouvelle IPA à confirmer par la CI avant livraison.
