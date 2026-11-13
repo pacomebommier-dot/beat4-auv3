@@ -31,23 +31,27 @@
    if(flags)*flags=moving?AUHostTransportStateMoving:(AUHostTransportStateFlags)0;
    if(sample)*sample=beat*48000*60/128;if(start)*start=0;if(end)*end=0;return YES;
   };
+  NSMutableArray *messages=[NSMutableArray new];
   unit.MIDIOutputEventBlock=^OSStatus(AUEventSampleTime time,uint8_t cable,NSInteger length,const uint8_t *bytes){
-   (void)time;(void)cable;(void)length;(void)bytes;return noErr;
+   NSMutableArray *data=[NSMutableArray new];for(NSInteger i=0;i<length;++i)[data addObject:@(bytes[i])];
+   [messages addObject:@{@"sample":@(time),@"cable":@(cable),@"bytes":data}];return noErr;
   };
   assert([unit allocateRenderResourcesAndReturnError:&error] && !error);
   AUInternalRenderBlock render=unit.internalRenderBlock;
+  __block const AURenderEvent *input=nullptr;
   void (^tick)(void)=^{
    float samples[256]={};AudioBufferList buffers{};buffers.mNumberBuffers=1;
    buffers.mBuffers[0]={2,sizeof(samples),samples};
    AudioTimeStamp stamp{};stamp.mFlags=kAudioTimeStampSampleTimeValid;stamp.mSampleTime=beat*48000*60/128;
    AudioUnitRenderActionFlags flags=0;
-   assert(render(&flags,&stamp,128,0,&buffers,nullptr,nil)==noErr);
+   assert(render(&flags,&stamp,128,0,&buffers,input,nil)==noErr);
   };
-  [unit selectProgram:7];tick();assert(unit.currentProgram==7);
+  [unit selectProgram:7];tick();assert(unit.currentProgram==7 && messages.count==1);
+  assert([messages[0][@"cable"] intValue]==1 && [messages[0][@"bytes"] isEqual:@[@207,@7]]);
   [unit saveSongTitle:@"R10 NATIVE TEST"];[unit saveSongBPM:135];[unit saveSongSubNote:5];
   [unit setGlobalMode:1];[unit saveCurrentMode];
   moving=YES;beat=1;tick();[unit selectProgram:39];tick();
-  assert([unit.transportSnapshot[@"selectedPC"] intValue]==39);
+  assert([unit.transportSnapshot[@"selectedPC"] intValue]==39 && messages.count==1);
   self.window=[[UIWindow alloc]initWithFrame:CGRectMake(0,0,1024,768)];self.window.rootViewController=vc;
   [self.window makeKeyAndVisible];
   NSString *directory=[NSHomeDirectory() stringByAppendingPathComponent:@"Documents/R10"];
@@ -79,7 +83,13 @@
     assert([UIImagePNGRepresentation(image) writeToFile:file atomically:YES]);
    }
   }
-  [@"PASS: 12 native UIKit renders, ACTIVE/SELECTED and colors on both grids\n" writeToFile:[directory stringByAppendingPathComponent:@"DONE.txt"] atomically:YES encoding:NSUTF8StringEncoding error:&error];
+  AURenderEvent event{};event.head.eventType=AURenderEventMIDI;event.head.eventSampleTime=AUEventSampleTimeImmediate;
+  event.MIDI.length=2;event.MIDI.data[0]=0xCF;event.MIDI.data[1]=103;input=&event;tick();
+  assert(unit.currentProgram==7 && [unit.transportSnapshot[@"uncertain"] boolValue] && messages.count==1);
+  event.MIDI.data[1]=39;tick();assert(unit.currentProgram==39 && messages.count==1);input=nullptr;
+  NSData *trace=[NSJSONSerialization dataWithJSONObject:@{@"host":@"SIMULATED",@"midiOutput":messages,@"journal":unit.diagnosticLog} options:NSJSONWritingPrettyPrinted error:&error];
+  assert(trace && !error && [trace writeToFile:[directory stringByAppendingPathComponent:@"mock-host-midi-trace.json"] atomically:YES]);
+  [@"PASS: 12 native UIKit renders, ACTIVE/SELECTED, grid colors and AUv3 MIDI anti-echo on simulated host\n" writeToFile:[directory stringByAppendingPathComponent:@"DONE.txt"] atomically:YES encoding:NSUTF8StringEncoding error:&error];
   assert(!error);[unit deallocateRenderResources];
  } @catch(NSException *exception){
   NSLog(@"R10 snapshot failure: %@",exception);abort();
