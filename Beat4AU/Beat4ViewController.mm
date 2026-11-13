@@ -95,7 +95,7 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
 @property(nonatomic,assign)BOOL bpmDragging;
 @property(nonatomic,assign)uint64_t seenRevision;
 @property(nonatomic,assign)CFTimeInterval lastWatchdog;
-@property(nonatomic,assign)BOOL lastMoving;
+@property(nonatomic,assign)BOOL lastMoving,lastSynced;
 @end
 @implementation Beat4ViewController
 - (AUAudioUnit *)createAudioUnitWithComponentDescription:(AudioComponentDescription)desc
@@ -268,7 +268,7 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
 }
 - (void)dragBPM:(UIPanGestureRecognizer*)gesture {
     NSInteger pg=[self.unit currentProgram];
-    if(gesture.state==UIGestureRecognizerStateEnded || gesture.state==UIGestureRecognizerStateCancelled || gesture.state==UIGestureRecognizerStateFailed)self.bpmDragging=NO;
+    if(gesture.state==UIGestureRecognizerStateCancelled || gesture.state==UIGestureRecognizerStateFailed){self.bpmDragging=NO;[self refreshSong];return;}
     if(pg<0)return;
     if(gesture.state==UIGestureRecognizerStateBegan){
         self.bpmDragging=YES;
@@ -278,6 +278,7 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
         self.bpmDragStart=beat4::initialDraggedBPM(stored,host);
         self.bpmDragOriginX=0;
     }
+    if(!self.bpmDragging)return;
     if(pg!=self.bpmDragProgram){self.bpmDragging=NO;[self refreshSong];return;}
     if(gesture.state==UIGestureRecognizerStateChanged ||
        gesture.state==UIGestureRecognizerStateEnded){
@@ -286,7 +287,8 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
         double target=beat4::draggedBPM((int)self.bpmDragStart,dx);
         [_bpmButton setTitle:[NSString stringWithFormat:@"%.0f BPM",target] forState:UIControlStateNormal];
         if(gesture.state==UIGestureRecognizerStateEnded){
-            [self.unit saveSongBPM:target];
+            [self.unit saveSongBPM:target program:self.bpmDragProgram];
+            self.bpmDragging=NO;
             [self refreshSong];
         }
     }
@@ -363,7 +365,7 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     if(link && !self.lastMoving && ![self.canvas lightsAnimating] && revision==self.seenRevision && !watchdog)return;
     if(watchdog)self.lastWatchdog=now;
     NSDictionary *data=[self.unit transportSnapshot];self.frameSnapshot=data;
-    if(!link || self.lastMoving || [data[@"moving"] boolValue] || [self.canvas lightsAnimating] || revision!=self.seenRevision)self.canvas.snapshot=data;
+    if(!link || self.lastSynced!=[data[@"synced"] boolValue] || self.lastMoving || [data[@"moving"] boolValue] || [self.canvas lightsAnimating] || revision!=self.seenRevision)self.canvas.snapshot=data;
     NSInteger pg=[data[@"pg"] integerValue];
     if(pg!=self.seenPG){self.seenPG=pg;[self refreshSong];}
     BOOL synced=[data[@"synced"] boolValue];
@@ -377,6 +379,6 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     BOOL enabled=[data[@"kickEnabled"] boolValue];
     [_kickButton setTitleColor:enabled?RGB(177,225,164):RGB(110,120,111) forState:UIControlStateNormal];
     if(!_levelSlider.tracking)_levelSlider.value=[data[@"kickLevel"] floatValue];
-    self.lastMoving=moving;self.seenRevision=revision;
+    self.lastMoving=moving;self.lastSynced=synced;self.seenRevision=revision;
 }
 @end

@@ -145,6 +145,16 @@ Snapshot load(const State& s) noexcept {
     }];
     return self;
 }
+// Host installation is independent of editor visibility. Publish only off render.
+- (void)setTransportStateBlock:(AUHostTransportStateBlock)block {
+    [super setTransportStateBlock:block];[self refreshHostCallbacks:YES];
+}
+- (void)setMusicalContextBlock:(AUHostMusicalContextBlock)block {
+    [super setMusicalContextBlock:block];[self refreshHostCallbacks:YES];
+}
+- (void)setMIDIOutputEventBlock:(AUMIDIOutputEventBlock)block {
+    [super setMIDIOutputEventBlock:block];[self refreshHostCallbacks:YES];
+}
 - (AUParameterTree *)parameterTree {return _params;}
 - (AUAudioUnitBusArray *)inputBusses {return _inputs;}
 - (AUAudioUnitBusArray *)outputBusses {return _outputs;}
@@ -406,11 +416,11 @@ Snapshot load(const State& s) noexcept {
     entry[@"title"]=clean.length?clean:@"UNKNOWN";
     [self persistSong:entry program:pg];
 }
-- (void)saveSongBPM:(double)bpm {
-    NSInteger pg=[self currentProgram];
-    if(!beat4::validProgram((int)pg)||!beat4::validBPM(bpm))return;
-    NSMutableDictionary *entry=[[self currentSong] mutableCopy];entry[@"bpm"]=@(std::round(bpm));
-    [self persistSong:entry program:pg];
+- (void)saveSongBPM:(double)bpm { [self saveSongBPM:bpm program:[self currentProgram]]; }
+- (void)saveSongBPM:(double)bpm program:(NSInteger)pg {
+    if(pg<0 || pg>=64 || !beat4::validBPM(bpm))return;
+    NSMutableDictionary *entry=[[self songForProgram:pg] mutableCopy];
+    entry[@"bpm"]=@(std::round(bpm));[self persistSong:entry program:pg];
 }
 - (void)saveSongSubNote:(NSInteger)note {
     NSInteger pg=[self currentProgram];

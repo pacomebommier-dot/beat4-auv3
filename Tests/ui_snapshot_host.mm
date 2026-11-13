@@ -50,6 +50,9 @@
   [unit selectProgram:7];tick();assert(unit.currentProgram==7 && messages.count==1);
   NSArray *expectedPC=@[@207,@7];
   assert([messages[0][@"cable"] intValue]==1 && [messages[0][@"bytes"] isEqual:expectedPC]);
+  [unit saveSongBPM:117 program:6];
+  assert([[[unit songForProgram:6] objectForKey:@"bpm"] doubleValue]==117);
+  assert([[[unit songForProgram:7] objectForKey:@"bpm"] doubleValue]==0);
   [unit saveSongTitle:@"R10 NATIVE TEST"];[unit saveSongBPM:135];[unit saveSongSubNote:5];
   [unit setGlobalMode:1];[unit saveCurrentMode];
   moving=YES;beat=1;tick();[unit selectProgram:39];tick();
@@ -100,13 +103,15 @@
   // A host may query the block before negotiation and install callbacks after allocation.
   Beat4AudioUnit *late=[[Beat4AudioUnit alloc]initWithComponentDescription:desc options:0 error:&error];
   AUInternalRenderBlock lateRender=late.internalRenderBlock;
+  assert([late allocateRenderResourcesAndReturnError:&error]);
+  [late deallocateRenderResources];
   AVAudioFormat *format=[[AVAudioFormat alloc]initStandardFormatWithSampleRate:44100 channels:2];
   assert([late.outputBusses[0] setFormat:format error:&error]);
   assert([late allocateRenderResourcesAndReturnError:&error]);
   late.musicalContextBlock=unit.musicalContextBlock;
   late.transportStateBlock=unit.transportStateBlock;
   late.MIDIOutputEventBlock=unit.MIDIOutputEventBlock;
-  [late transportSnapshot]; // refresh missing callbacks off the render thread
+  // No snapshot/UI call: host setter publication must work with the editor closed.
   float lateSamples[256]={};AudioBufferList lateBuffers{};lateBuffers.mNumberBuffers=1;
   lateBuffers.mBuffers[0]={2,sizeof(lateSamples),lateSamples};
   AudioTimeStamp lateStamp{};lateStamp.mFlags=kAudioTimeStampSampleTimeValid;
