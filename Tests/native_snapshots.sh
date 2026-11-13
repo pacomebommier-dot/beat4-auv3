@@ -7,7 +7,7 @@ xcrun --sdk iphonesimulator clang++ -std=c++17 -fobjc-arc -fblocks \
   -target x86_64-apple-ios15.0-simulator Tests/ui_snapshot_host.mm \
   Beat4AU/Beat4AudioUnit.mm Beat4AU/Beat4ViewController.mm \
   -framework UIKit -framework Foundation -framework CoreAudioKit \
-  -framework AVFoundation -framework AudioToolbox -framework QuartzCore \
+  -framework AVFoundation -framework AudioToolbox -framework QuartzCore -framework CoreGraphics \
   -o "$APP/BEAT4Snapshot"
 python3 - "$APP/Info.plist" <<'PY'
 import plistlib,sys
