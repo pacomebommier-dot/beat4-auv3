@@ -55,7 +55,7 @@ inline Layout layoutFor(double W, double H) noexcept {
     if(compact){
         l.pg={pad,footerY-14,70,13};
         l.bpm={pad,footerY, W*.35,30};
-        l.song={W*.45,footerY,W*.55-pad,30};
+        l.song={W*.45,footerY,W*.55-pad-45,30};
     } else if(narrow){
         l.bpm={pad,footerY,W*.40,34};
         l.song={W*.46,footerY,W*.54-pad,34};
@@ -78,7 +78,7 @@ inline Layout layoutFor(double W, double H) noexcept {
     l.queue={pad,rowY,W*.43,18};
     l.modeControl={W*.49,rowY,W*.29,18};
     l.save={W*.82,rowY,W*.14,18};
-    l.toggle={W-pad-35,compact?headerY:(narrow?footerY+36:footerY),35,32};
+    l.toggle={W-pad-35,narrow&&!compact?footerY+36:footerY,35,32};
     return l;
 }
 }

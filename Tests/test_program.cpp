@@ -30,6 +30,11 @@ int main(){
  order.request(0,false,false,held,m);HostPosition boundary{true,true,1,0,4,128};
  order.advance(boundary,m);order.request(1,true,false,boundary,m);boundary.beat=4;boundary.barStart=4;
  auto actions=order.renderStep(boundary,m,2);assert(actions[0].activated<0 && actions[1].activated<0 && order.selected==2 && order.active==0);
+ ProgramEngine drift;ProgramMemory cycles;cycles.queue[0]=8;cycles.queue[1]=8;
+ drift.request(0,false,false,held,cycles);boundary.beat=0;boundary.barStart=0;drift.advance(boundary,cycles);
+ boundary.beat=7;drift.request(1,true,false,boundary,cycles);boundary.beat=8.1;drift.advance(boundary,cycles);
+ boundary.beat=9;drift.request(0,true,false,boundary,cycles);boundary.beat=16;
+ assert(drift.advance(boundary,cycles).activated==0);
  assert(shouldEmitTempo({5,false,140},140));assert(!shouldEmitTempo({-1,false,140},140));
  std::cout<<"R10 PC/queue/tempo state machine PASS\n";
 }

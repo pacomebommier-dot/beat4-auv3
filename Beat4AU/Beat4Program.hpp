@@ -48,7 +48,12 @@ public:
   wasMoving=true;
   if(haveBeat && h.beat<lastBeat-1e-7){ramp=false;phaseKnown=false;if(selected>=0)uncertain=true;}
   lastBeat=h.beat;haveBeat=true;
-  if(selected>=0 && !uncertain && h.beat>=due) return activate(selected,pendingLocal,h,m);
+  if(selected>=0 && !uncertain && h.beat>=due){
+   auto a=activate(selected,pendingLocal,h,m);
+   // Keep the scheduled musical boundary, not the later render observation, as cycle origin.
+   anchor=due;if(ramp)rampStart=due;
+   return a;
+  }
   ProgramAction a;
   if(ramp){
    const double f=std::clamp((h.beat-rampStart)/rampLength,0.0,1.0);

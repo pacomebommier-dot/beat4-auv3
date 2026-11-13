@@ -223,7 +223,7 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     NSString *name=song[@"title"] ?: @"UNKNOWN";
     [_songButton setTitle:name forState:UIControlStateNormal];
     double bpm=[song[@"bpm"] doubleValue];
-    [_bpmButton setTitle:bpm>=20?[NSString stringWithFormat:@"%.0f BPM",std::round(bpm)]:@"--- BPM" forState:UIControlStateNormal];
+    if(!self.bpmDragging)[_bpmButton setTitle:bpm>=20?[NSString stringWithFormat:@"%.0f BPM",std::round(bpm)]:@"--- BPM" forState:UIControlStateNormal];
     int note=[song[@"sub"] intValue];
     [_noteButton setTitle:[NSString stringWithUTF8String:beat4::noteName(note)] forState:UIControlStateNormal];
     BOOL enabled=[[self.unit transportSnapshot][@"kickEnabled"] boolValue];
@@ -231,7 +231,7 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
 }
 - (void)editSong:(id)sender {
     (void)sender;if([self.unit currentProgram]<0)return;
-    UIAlertController *a=[UIAlertController alertControllerWithTitle:@"SONG NAME" message:@"Nom mémorisé pour ce PG" preferredStyle:UIAlertControllerStyleAlert];
+    UIAlertController *a=[UIAlertController alertControllerWithTitle:@"SONG NAME" message:@"Nom mémorisé pour ce PC" preferredStyle:UIAlertControllerStyleAlert];
     NSString *name=[self.unit currentSong][@"title"];
     [a addTextFieldWithConfigurationHandler:^(UITextField* field){field.text=[name isEqualToString:@"UNKNOWN"]?@"":name;
         field.placeholder=@"UNKNOWN";field.autocorrectionType=UITextAutocorrectionTypeNo;}];
