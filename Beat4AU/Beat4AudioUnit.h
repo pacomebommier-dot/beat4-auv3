@@ -11,6 +11,12 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)saveSongSubNote:(NSInteger)note;
 - (void)setKickLevel:(float)level;
 - (void)setKickEnabled:(BOOL)enabled;
-- (void)requestMMC:(uint8_t)command;
+- (NSArray *)diagnosticLog;
+- (void)requestTransportToggle;
+- (void)selectProgram:(NSInteger)pc;
+- (void)setGlobalMode:(NSInteger)mode;
+- (void)saveCurrentMode;
+- (NSDictionary *)songForProgram:(NSInteger)pc;
+- (void)saveQueue:(NSInteger)beats program:(NSInteger)pc;
 @end
 NS_ASSUME_NONNULL_END

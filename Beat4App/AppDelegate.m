@@ -11,7 +11,7 @@
     label.font = [UIFont monospacedSystemFontOfSize:19 weight:UIFontWeightSemibold];
     label.numberOfLines = 0;
     label.textAlignment = NSTextAlignmentCenter;
-    label.text = @"BEAT//4\n\nAUv3 INSTRUMENT\n\nOpen AUM > Audio Channel\n> Audio Unit Instrument > BEAT//4\n\nCircuit Tracks PG on MIDI channel 16.\nRoute BEAT//4 MIDI OUT to AUM MIDI Control.\nThis display runs inside AUM.";
+    label.text = @"BEAT//4\n\nAUv3 INSTRUMENT\n\nOpen AUM > Audio Channel\n> Audio Unit Instrument > BEAT//4\n\nCircuit Tracks PC on MIDI channel 16.\nAUM Control output → AUM MIDI Control.\nCircuit Projects output → Circuit Tracks.\nThis display runs inside AUM.";
     [controller.view addSubview:label];
     [NSLayoutConstraint activateConstraints:@[
         [label.centerXAnchor constraintEqualToAnchor:controller.view.centerXAnchor],

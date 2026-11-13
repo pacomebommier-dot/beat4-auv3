@@ -1,8 +1,9 @@
 name: BEAT4 native iOS build (independent of XONE)
 on:
   workflow_dispatch:
+  pull_request:
   push:
-    branches: [main]
+    branches: [main, "fix/r10-*"]
     paths:
       - 'Beat4AU/**'
       - 'Beat4App/**'
@@ -14,6 +15,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: IPA package verifier regression test
+        run: python3 Tests/test_ipa_package.py
       - name: C++ portable tests
         run: bash Tests/run.sh
       - name: C++ sanitizers (ASan / UBSan)
@@ -25,6 +28,10 @@ jobs:
     needs: core-tests
     steps:
       - uses: actions/checkout@v4
+      - name: Native persistence regression tests
+        run: |
+          clang++ -std=c++17 -fobjc-arc Tests/test_persistence.mm -framework Foundation -o "$RUNNER_TEMP/test_persistence"
+          "$RUNNER_TEMP/test_persistence"
       - name: Show build environment
         run: xcodebuild -version
       - name: Compile unsigned BEAT4 container and extension
@@ -36,14 +43,25 @@ jobs:
             -destination 'generic/platform=iOS' \
             -derivedDataPath "$RUNNER_TEMP/Beat4DerivedData" \
             CODE_SIGNING_ALLOWED=NO build
-      - name: Package UNSIGNED (not directly installable) IPA
+      - name: Native UIKit state and responsive captures
+        run: bash Tests/native_snapshots.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: R10-native-UIKit-snapshots
+          path: native-snapshots/
+          if-no-files-found: warn
+      - name: Package R10 unsigned IPA for the established signing procedure
         run: |
           mkdir -p "$RUNNER_TEMP/Payload"
           cp -a "$RUNNER_TEMP/Beat4DerivedData/Build/Products/Release-iphoneos/BEAT4.app" "$RUNNER_TEMP/Payload/"
-          cd "$RUNNER_TEMP"
-          zip -qry "$GITHUB_WORKSPACE/BEAT4_UNSIGNED.ipa" Payload
+          (cd "$RUNNER_TEMP" && zip -qry "$GITHUB_WORKSPACE/BEAT4_R10_V0_5_7_BUILD7_UNSIGNED.ipa" Payload)
+          python3 Tools/verify_ipa.py BEAT4_R10_V0_5_7_BUILD7_UNSIGNED.ipa --version 0.5.7 --build 7
+          shasum -a 256 BEAT4_R10_V0_5_7_BUILD7_UNSIGNED.ipa > BEAT4_R10_IPA_SHA256.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: BEAT4-UNSIGNED-IPA
-          path: BEAT4_UNSIGNED.ipa
+          name: BEAT4-R10-V0-5-7-UNSIGNED-IPA
+          path: |
+            BEAT4_R10_V0_5_7_BUILD7_UNSIGNED.ipa
+            BEAT4_R10_IPA_SHA256.txt
           if-no-files-found: error

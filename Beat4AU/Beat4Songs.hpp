@@ -36,4 +36,31 @@ inline bool isCircuitProgramChange(uint8_t status, uint8_t program, int &pg) noe
     pg = static_cast<int>(program);
     return true;
 }
+inline int storedQueue(int value) noexcept {return value>0 && value<=65536?value:0;}
+inline int storedMode(int value) noexcept {return value>=0 && value<=2?value:-1;}
+inline double storedBPM(double value) noexcept {return validBPM(value)?std::round(value):0;}
+struct MIDIMessage { uint8_t cable=0,length=0;std::array<uint8_t,3> bytes{}; };
+inline MIDIMessage circuitMessage(int pc) noexcept {
+ if(pc<0 || pc>=64)return {};
+ return {1,2,{0xCF,static_cast<uint8_t>(pc),0}};
+}
+inline MIDIMessage tempoMessage(double bpm) noexcept {
+ int n=pitchBend14(bpm);if(n<0)return {};
+ return {0,3,{0xEE,static_cast<uint8_t>(n&127),static_cast<uint8_t>((n>>7)&127)}};
+}
+
+// Existing V0.5.6 AUM mapping: channel 16, CC110 START / CC111 STOP.
+// Preserve each release before another press, as the previous SafetyPulse did.
+class TransportPulse {
+ int pending=-1,release=-1;
+public:
+ void request(bool moving) noexcept {pending=moving?111:110;}
+ MIDIMessage next() noexcept {
+  if(release>=0){const int cc=release;release=-1;return {0,3,{0xBF,static_cast<uint8_t>(cc),0}};}
+  if(pending<0)return {};
+  const int cc=pending;pending=-1;release=cc;
+  return {0,3,{0xBF,static_cast<uint8_t>(cc),127}};
+ }
+};
+
 }
