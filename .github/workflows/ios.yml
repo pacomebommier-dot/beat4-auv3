@@ -41,3 +41,11 @@ jobs:
             -destination 'generic/platform=iOS' \
             -derivedDataPath "$RUNNER_TEMP/Beat4DerivedData" \
             CODE_SIGNING_ALLOWED=NO build
+      - name: Native UIKit state and responsive captures
+        run: bash Tests/native_snapshots.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: R10-native-UIKit-snapshots
+          path: native-snapshots/
+          if-no-files-found: warn
