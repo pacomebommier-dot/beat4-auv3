@@ -26,10 +26,12 @@ inline double subFrequency(int pitchClass) noexcept {
     if (!validSub(pitchClass)) return 43.653528929; // neutral sound until song known
     return 440.0 * std::pow(2.0, (24 + pitchClass - 69.0) / 12.0);
 }
-inline int pitchBend14(double bpm, double minBPM=20, double maxBPM=240) noexcept {
-    if (!validBPM(bpm) || !(maxBPM > minBPM) || bpm < minBPM || bpm > maxBPM) return -1;
-    const double normalized = std::clamp((bpm - minBPM)/(maxBPM - minBPM), 0.0, 1.0);
-    return static_cast<int>(std::lround(normalized * 16383.0));
+// AUM: CC118, channel 15, absolute range 50..177 BPM (one BPM per value).
+// The repertoire uses 50..170; 171..177 completes the 128-value MIDI range.
+// Keep legacy song storage intact, but never wrap or clamp an unsupported tempo.
+inline int tempoCC7(double bpm) noexcept {
+    if (!std::isfinite(bpm) || bpm < 50 || bpm > 177) return -1;
+    return static_cast<int>(std::lround(bpm)) - 50;
 }
 inline bool isCircuitProgramChange(uint8_t status, uint8_t program, int &pg) noexcept {
     if (status != 0xCF || program > 127) return false; // channel 16 only
@@ -45,8 +47,8 @@ inline MIDIMessage circuitMessage(int pc) noexcept {
  return {1,2,{0xCF,static_cast<uint8_t>(pc),0}};
 }
 inline MIDIMessage tempoMessage(double bpm) noexcept {
- int n=pitchBend14(bpm);if(n<0)return {};
- return {0,3,{0xEE,static_cast<uint8_t>(n&127),static_cast<uint8_t>((n>>7)&127)}};
+ int n=tempoCC7(bpm);if(n<0)return {};
+ return {0,3,{0xBE,118,static_cast<uint8_t>(n)}};
 }
 
 // Existing V0.5.6 AUM mapping: channel 16, CC110 START / CC111 STOP.

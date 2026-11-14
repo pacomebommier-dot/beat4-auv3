@@ -18,10 +18,10 @@ int main(){
     assert(!isCircuitProgramChange(0xC0,6,pg));
     assert(std::abs(subFrequency(5)-43.6535)<0.01);
     assert(std::abs(subFrequency(7)-48.9994)<0.01);
-    assert(pitchBend14(20)==0 && pitchBend14(240)==16383);
-    assert(std::abs(pitchBend14(130)-8192)<=1);
-    assert(pitchBend14(0)==-1);
-    assert(pitchBend14(241)==-1);
+    assert(tempoCC7(50)==0 && tempoCC7(177)==127);
+    assert(tempoCC7(130)==80);
+    assert(tempoCC7(0)==-1);
+    assert(tempoCC7(241)==-1);
     assert(barBrightness(0,0,0)==1);
     assert(barBrightness(0,0,.58)==0);
     KickVoice k; k.trigger();

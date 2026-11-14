@@ -98,6 +98,25 @@
   moving=NO;[unit requestTransportToggle];tick();tick();
   NSArray *playPress=@[@191,@110,@127],*playRelease=@[@191,@110,@0];
   assert(messages.count==5 && [messages[3][@"bytes"] isEqual:playPress] && [messages[4][@"bytes"] isEqual:playRelease]);
+  // Exercise the real AU render path: tempo CC on cable 0, PC on cable 1.
+  // Saving a BPM alone remains silent; selecting a known PC at STOP sends it.
+  for(int pc=0;pc<3;++pc){
+   const int bpm=pc==0?50:pc==1?128:170;
+   const NSUInteger before=messages.count;
+   [unit saveSongBPM:bpm program:pc];tick();assert(messages.count==before);
+   [unit selectProgram:pc];tick();assert(messages.count==before+2);
+   NSArray *expectedTempo=@[@190,@118,@(bpm-50)];
+   assert([messages[before][@"cable"] intValue]==1);
+   assert([messages[before+1][@"cable"] intValue]==0);
+   assert([messages[before+1][@"bytes"] isEqual:expectedTempo]);
+   tick();assert(messages.count==before+2); // no unsolicited repeated tempo
+  }
+  const NSUInteger beforeUnknown=messages.count;
+  [unit selectProgram:3];tick();assert(messages.count==beforeUnknown+1); // PC only
+  for(NSDictionary *message in messages){
+   NSArray *bytes=message[@"bytes"];
+   assert(([bytes[0] intValue]&0xF0)!=0xE0); // no pitch bend on either output
+  }
   NSData *trace=[NSJSONSerialization dataWithJSONObject:@{@"host":@"SIMULATED",@"midiOutput":messages,@"journal":unit.diagnosticLog} options:NSJSONWritingPrettyPrinted error:&error];
   assert(trace && !error && [trace writeToFile:[directory stringByAppendingPathComponent:@"mock-host-midi-trace.json"] atomically:YES]);
   // A host may query the block before negotiation and install callbacks after allocation.

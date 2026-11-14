@@ -2,7 +2,7 @@
 
 Instrument AUv3 pour AUM, conservant le moteur KICK/SUB/LEVEL et les quatre barres du projet existant.
 
-**Version de test R10 : 0.5.7 build 7. IPA non signée produite selon la procédure habituelle des livraisons V0.5.6 ; validation matérielle AUM/Circuit encore ouverte.**
+**Version de test R10 : 0.5.9 build 9. IPA non signée produite selon la procédure habituelle des livraisons V0.5.6 ; validation matérielle AUM/Circuit encore ouverte.**
 
 Le [contrat consolidé R10](docs/r10/01_CONTRAT_CONSOLIDE_R10.md) est prioritaire. Les règles BPM/MODE du [contrat V08](docs/r10/01_CONTRAT_PC_TEMPO_FIX_V08.md) restent applicables au moment de l’activation effective du PC.
 
@@ -18,8 +18,10 @@ BPM entier mémorisé par glissement, sans effet immédiat sur AUM. SAVE ne mém
 
 - Circuit canal 16 → entrée BEAT//4.
 - Sortie **Circuit Projects** → Circuit uniquement : PC 0–63 émis à la frontière calculée pour éviter une seconde queue native.
-- Sortie **AUM Control** → MIDI Control AUM uniquement : pitch bend canal 15, plage BPM 20–240 ; transport conservé de V0.5.6 : CC110 PLAY et CC111 STOP sur canal 16, impulsion 127 puis 0 au buffer suivant.
+- Sortie **AUM Control** → MIDI Control AUM uniquement : **CC118 canal 15**, absolu, plage AUM **50–177 BPM** (valeur CC = BPM entier − 50 ; répertoire 50–170) ; transport conservé de V0.5.6 : CC110 PLAY et CC111 STOP sur canal 16, impulsion 127 puis 0 au buffer suivant.
 - AUM maître de la position, du tempo et du transport. Aucun message de commande transport émis par un rappel PC.
+
+Retirer l’ancien mapping PBEND de Tempo. Le réglage AUM doit être **50–177**, et non 50–170 : les 128 valeurs MIDI donnent ainsi un pas exact de 1 BPM. Voir la [migration et recette 0.5.9](docs/r10/TEMPO_CC_059.md). Les rampes gardent leur durée musicale, avec des consignes arrondies au BPM entier et sans répétition d’un CC identique.
 
 La réception exacte du mapping tempo/transport, la phase Drum 1 et le comportement matériel des valeurs queued doivent être vérifiés avant usage scène. Le scheduling est actuellement à résolution du buffer audio. Voir [audit, recette T01–T16 et limites](docs/r10/AUDIT_ET_RECETTE.md).
 
@@ -30,7 +32,7 @@ bash Tests/run.sh
 BEAT4_SANITIZE=1 bash Tests/run.sh
 ```
 
-Neuf exécutables C++ couvrent PC/QUEUE, tempo/MODE, octets MIDI, validation des mémoires, journal, transport, audio et géométrie. Les contrôles géométriques ne sont pas des captures UIKit.
+Quatorze exécutables C++ couvrent PC/QUEUE, tempo/MODE, octets MIDI, validation des mémoires, journal, transport, audio et géométrie. Les contrôles géométriques ne sont pas des captures UIKit.
 
 Sur Mac : ouvrir `Beat4.xcodeproj`, schéma `Beat4App`, configurer les identifiants et la signature de l’app et de l’extension. Le workflow iOS sur runner Intel compile sans signature, exécute le test natif `Tests/test_persistence.mm` et produit douze captures UIKit avec assertions d’état/couleurs et trace MIDI sur hôte simulé (`Tests/native_snapshots.sh`). Après ces contrôles, il emballe une IPA non signée et vérifie les versions, identifiants et exécutables arm64 de l’application et de son extension. Le fichier sert à la procédure habituelle de signature/installation de test.
 

@@ -1,5 +1,7 @@
 # BEAT//4 V0.5 — recette AUM (non exécutée)
 
+> Recette historique V0.5 : pour la version 0.5.9, suivre [la migration MIDI CC118, canal 15, plage 50–177](r10/TEMPO_CC_059.md). PLAY/STOP reste sur CC110/CC111 canal 16.
+
 **Ne pas confondre avec XONE.** Installer l'IPA BEAT//4 (lorsqu'elle sera construite et signée) comme une application distincte.
 
 ## Préparation

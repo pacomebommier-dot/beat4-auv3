@@ -1,5 +1,7 @@
 # BEAT//4 — audit et livraison de développement R10
 
+> Historique : pour la version 0.5.9, les consignes de tempo/transport ci-dessous sont remplacées par [la migration MIDI CC118, canal 15, plage 50–177](TEMPO_CC_059.md). PLAY/STOP reste sur CC110/CC111 canal 16.
+
 Base auditée : `pacomebommier-dot/beat4-auv3`, main `25f789f1a787d268c021b3543930df27e9083f8b`. Clone neuf, aucun travail local préexistant écrasé. Branche `fix/r10-consolidated`, non fusionnée. Contrat R10 prioritaire et contrat V08 archivés dans ce dossier. Ceci est une livraison source de développement, pas une validation matérielle ni une livraison IPA.
 
 ## Audit ciblé avant corrections
