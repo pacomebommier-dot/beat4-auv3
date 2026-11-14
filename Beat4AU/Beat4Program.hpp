@@ -2,6 +2,7 @@
 #include <array>
 #include <cmath>
 #include <algorithm>
+#include "Beat4Songs.hpp"
 namespace beat4 {
 struct ProgramMemory {
  std::array<int,64> queue{}, mode{};
@@ -12,7 +13,10 @@ struct ProgramMemory {
 // beat and barStart use AU musical-context quarter-note units.
 struct HostPosition { bool valid=false, moving=false; double beat=0, barStart=0, barLength=4, bpm=0; };
 struct ProgramAction { int activated=-1; bool sendPC=false; double tempo=0; };
-inline bool shouldEmitTempo(ProgramAction a,double last) noexcept {return a.tempo>0 && (a.activated>=0 || std::abs(a.tempo-last)>=0.01);}
+inline bool shouldEmitTempo(ProgramAction a,double last) noexcept {
+ const int value=tempoCC7(a.tempo);
+ return value>=0 && (a.activated>=0 || value!=tempoCC7(last));
+}
 class ProgramEngine {
 public:
  int active=-1, selected=-1;
