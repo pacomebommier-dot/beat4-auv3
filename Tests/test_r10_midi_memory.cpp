@@ -10,7 +10,7 @@ int main(){
  for(int bpm=50;bpm<=177;++bpm){
   auto tempo=tempoMessage(bpm);
   assert(tempo.cable==0 && tempo.length==3 && tempo.bytes[0]==0xBE);
-  assert(tempo.bytes[1]==119 && tempo.bytes[2]<=127);
+  assert(tempo.bytes[1]==118 && tempo.bytes[2]<=127);
   assert(50+tempo.bytes[2]==bpm);
  }
  assert(tempoMessage(128).bytes[2]==78 && tempoMessage(170).bytes[2]==120);

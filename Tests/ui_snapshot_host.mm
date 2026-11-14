@@ -105,7 +105,7 @@
    const NSUInteger before=messages.count;
    [unit saveSongBPM:bpm program:pc];tick();assert(messages.count==before);
    [unit selectProgram:pc];tick();assert(messages.count==before+2);
-   NSArray *expectedTempo=@[@190,@119,@(bpm-50)];
+   NSArray *expectedTempo=@[@190,@118,@(bpm-50)];
    assert([messages[before][@"cable"] intValue]==1);
    assert([messages[before+1][@"cable"] intValue]==0);
    assert([messages[before+1][@"bytes"] isEqual:expectedTempo]);

@@ -26,7 +26,7 @@ inline double subFrequency(int pitchClass) noexcept {
     if (!validSub(pitchClass)) return 43.653528929; // neutral sound until song known
     return 440.0 * std::pow(2.0, (24 + pitchClass - 69.0) / 12.0);
 }
-// AUM: CC119, channel 15, absolute range 50..177 BPM (one BPM per value).
+// AUM: CC118, channel 15, absolute range 50..177 BPM (one BPM per value).
 // The repertoire uses 50..170; 171..177 completes the 128-value MIDI range.
 // Keep legacy song storage intact, but never wrap or clamp an unsupported tempo.
 inline int tempoCC7(double bpm) noexcept {
@@ -48,7 +48,7 @@ inline MIDIMessage circuitMessage(int pc) noexcept {
 }
 inline MIDIMessage tempoMessage(double bpm) noexcept {
  int n=tempoCC7(bpm);if(n<0)return {};
- return {0,3,{0xBE,119,static_cast<uint8_t>(n)}};
+ return {0,3,{0xBE,118,static_cast<uint8_t>(n)}};
 }
 
 // Existing V0.5.6 AUM mapping: channel 16, CC110 START / CC111 STOP.

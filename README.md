@@ -18,7 +18,7 @@ BPM entier mémorisé par glissement, sans effet immédiat sur AUM. SAVE ne mém
 
 - Circuit canal 16 → entrée BEAT//4.
 - Sortie **Circuit Projects** → Circuit uniquement : PC 0–63 émis à la frontière calculée pour éviter une seconde queue native.
-- Sortie **AUM Control** → MIDI Control AUM uniquement : **CC119 canal 15**, absolu, plage AUM **50–177 BPM** (valeur CC = BPM entier − 50 ; répertoire 50–170) ; transport conservé de V0.5.6 : CC110 PLAY et CC111 STOP sur canal 16, impulsion 127 puis 0 au buffer suivant.
+- Sortie **AUM Control** → MIDI Control AUM uniquement : **CC118 canal 15**, absolu, plage AUM **50–177 BPM** (valeur CC = BPM entier − 50 ; répertoire 50–170) ; transport conservé de V0.5.6 : CC110 PLAY et CC111 STOP sur canal 16, impulsion 127 puis 0 au buffer suivant.
 - AUM maître de la position, du tempo et du transport. Aucun message de commande transport émis par un rappel PC.
 
 Retirer l’ancien mapping PBEND de Tempo. Le réglage AUM doit être **50–177**, et non 50–170 : les 128 valeurs MIDI donnent ainsi un pas exact de 1 BPM. Voir la [migration et recette 0.5.9](docs/r10/TEMPO_CC_059.md). Les rampes gardent leur durée musicale, avec des consignes arrondies au BPM entier et sans répétition d’un CC identique.

@@ -6,19 +6,21 @@ Correctif demandé après test AUM : remplacer le pitch bend de tempo. Le réper
 
 1. Installer la nouvelle version et conserver le routage **AUM Control → MIDI Control AUM**. La sortie **Circuit Projects** reste réservée au Circuit.
 2. Ouvrir **MIDI CTRL → Transport → Tempo**, retirer l'ancienne affectation PBEND.
-3. Choisir **CC**, numéro **119**, canal **15**, en contrôle absolu.
+3. Choisir **CC**, numéro **118**, canal **15**, en contrôle absolu.
 4. Régler les bornes de sortie de la plage AUM sur **50 BPM → 177 BPM** (CC 0 → CC 127), sans inversion. **Ne pas régler 50 → 170** : cela introduirait de nouveau un facteur d'échelle et des BPM fractionnaires.
-5. Garder CC110/CC111 canal 16 pour PLAY/STOP. Enregistrer la session AUM.
+5. Garder CC110/CC111 canal 16 pour PLAY/STOP. Retirer toute ancienne affectation de transport CC119 canal 15 si elle provient des consignes R10 initiales. Enregistrer la session AUM.
 
 Le [manuel AUM](https://www.kymatica.com/aum/help) décrit le type CC et les bornes de mapping. Les noms exacts de contrôles peuvent varier selon la version AUM. Ce réglage est indispensable : un message CC ne contient pas une unité « BPM » et ne configure pas AUM à distance.
 
-| BPM demandé | CC119 canal 15 | Octets hexadécimaux |
+| BPM demandé | CC118 canal 15 | Octets hexadécimaux |
 |---|---|---|
-| 50 | 0 | BE 77 00 |
-| 120 | 70 | BE 77 46 |
-| 128 | 78 | BE 77 4E |
-| 170 | 120 | BE 77 78 |
-| 177 (borne technique) | 127 | BE 77 7F |
+| 50 | 0 | BE 76 00 |
+| 120 | 70 | BE 76 46 |
+| 128 | 78 | BE 76 4E |
+| 170 | 120 | BE 76 78 |
+| 177 (borne technique) | 127 | BE 76 7F |
+
+CC118 est réservé au tempo pour éviter le CC119 proposé pour le transport dans un ancien audit R10.
 
 ## Comportement
 
@@ -38,6 +40,6 @@ Le [manuel AUM](https://www.kymatica.com/aum/help) décrit le type CC et les bor
 
 ## Validation automatisée
 
-Tests portables : tous les BPM 50–177, arrondis, valeurs invalides, montée/descente complète dans les deux modes (121 CC distincts), répétition à nouvelle activation et non-régressions R10. Le harness natif vérifie l'envoi réel par l'AU de CC119 canal 15 sur câble 0 aux BPM 50/128/170, le PC sur câble 1, l'absence de pitch bend, de tempo sur PC inconnu et d'envoi déclenché par la seule édition.
+Tests portables : tous les BPM 50–177, arrondis, valeurs invalides, montée/descente complète dans les deux modes (121 CC distincts), répétition à nouvelle activation et non-régressions R10. Le harness natif vérifie l'envoi réel par l'AU de CC118 canal 15 sur câble 0 aux BPM 50/128/170, le PC sur câble 1, l'absence de pitch bend, de tempo sur PC inconnu et d'envoi déclenché par la seule édition.
 
 La CI compile l'app et l'extension et vérifie l'IPA 0.5.9/build 9. L'IPA suit la procédure de test existante : **non signée**, à signer avant installation. La recette matérielle AUM ne peut être déclarée validée par ces tests simulés.
