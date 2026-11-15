@@ -55,8 +55,27 @@ inline MIDIMessage tempoMessage(double bpm) noexcept {
 // Preserve each release before another press, as the previous SafetyPulse did.
 class TransportPulse {
  int pending=-1,release=-1;
+ int observed=-1,target=-1;
+ void setTarget(bool play) noexcept {
+  const int desired=play?1:0;
+  // While waiting for the host, compare with the requested state instead of
+  // stale host flags. This also makes local repeated presses deterministic.
+  if(desired==(target>=0?target:observed))return;
+  target=desired;pending=play?110:111;
+ }
 public:
- void request(bool moving) noexcept {pending=moving?111:110;}
+ void observe(bool valid,bool moving) noexcept {
+  if(!valid)return;
+  observed=moving?1:0;
+  // A matching old host reading is not an acknowledgement of an unsent
+  // opposite command waiting behind the previous CC release.
+  if(target==observed && pending<0)target=-1;
+ }
+ void receive(uint8_t status) noexcept {
+  if(status==0xFA || status==0xFB)setTarget(true);
+  else if(status==0xFC)setTarget(false);
+ }
+ void request(bool moving) noexcept {setTarget(!(target>=0?target!=0:moving));}
  MIDIMessage next() noexcept {
   if(release>=0){const int cc=release;release=-1;return {0,3,{0xBF,static_cast<uint8_t>(cc),0}};}
   if(pending<0)return {};
