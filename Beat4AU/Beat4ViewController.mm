@@ -121,7 +121,11 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     self.seenPG=-999;self.editedPC=0;self.canvas.showBars=YES;
     _logo=[self makeLabel:@"BEAT//4" size:20 color:RGB(228,230,219)];
     _logo.font=Mono(20,UIFontWeightSemibold);
-    _versionLabel=[self makeLabel:[NSString stringWithFormat:@"v%@",[NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"0.5.10"] size:8 color:RGB(122,145,121)];
+    _logo.userInteractionEnabled=YES;
+    _logo.accessibilityLabel=@"BEAT//4, diagnostic MIDI";
+    _logo.accessibilityTraits=UIAccessibilityTraitButton;
+    [_logo addGestureRecognizer:[[UITapGestureRecognizer alloc]initWithTarget:self action:@selector(showMIDIDiagnostic:)]];
+    _versionLabel=[self makeLabel:[NSString stringWithFormat:@"v%@",[NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"0.5.11"] size:8 color:RGB(122,145,121)];
     _modeLabel=[self makeLabel:@"TEMPO MODE" size:10 color:RGB(197,208,197)];
     _pcModeLabel=[self makeLabel:@"" size:10 color:RGB(132,157,136)];
     _host=[self makeLabel:@"AUM  •  WAIT" size:11 color:RGB(144,161,140)];_host.textAlignment=NSTextAlignmentRight;
@@ -231,6 +235,20 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     }
     _noteButton.menu=[UIMenu menuWithChildren:actions];
     _noteButton.showsMenuAsPrimaryAction=YES;
+}
+- (void)showMIDIDiagnostic:(id)sender {
+    (void)sender;
+    NSDictionary *s=[self.unit transportSnapshot];
+    NSString *waiting=[s[@"awaitingTransport"] intValue]<0?@"aucune":([s[@"awaitingTransport"] boolValue]?@"PLAY":@"STOP");
+    NSString *message=[NSString stringWithFormat:
+        @"Start/Continue reçus : %@\nStop reçus : %@\nDernier message : %@\nCommandes envoyées à AUM : %@\nAttente de confirmation : %@\nAUM : %@\nRendu actif : %@\nSortie MIDI : %@\nDernier statut d’envoi : %@\nPC actif : %d · sélection : %d\nPhase incertaine : %@",
+        s[@"receivedStart"],s[@"receivedStop"],s[@"lastRealtime"],s[@"sentTransport"],waiting,
+        [s[@"transportValid"] boolValue]?([s[@"moving"] boolValue]?@"PLAY":@"arrêté"):@"inconnu",
+        [s[@"hasRender"] boolValue]?@"oui":@"non",[s[@"midiOut"] boolValue]?@"disponible":@"absente",s[@"transportStatus"],
+        [s[@"pg"] intValue]+1,[s[@"selectedPC"] intValue]+1,[s[@"uncertain"] boolValue]?@"oui":@"non"];
+    UIAlertController *alert=[UIAlertController alertControllerWithTitle:@"Diagnostic MIDI" message:message preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Fermer" style:UIAlertActionStyleCancel handler:nil]];
+    [self presentViewController:alert animated:YES completion:nil];
 }
 - (void)refreshSong {
     NSDictionary *state=self.frameSnapshot ?: [self.unit transportSnapshot];

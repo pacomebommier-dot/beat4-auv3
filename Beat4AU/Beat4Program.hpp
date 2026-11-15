@@ -35,8 +35,11 @@ public:
   // Immediate incoming PC is evidence of the sender's project change, not a local queue request.
   if(h.valid && (!h.moving || (!local && !queued))) return activate(pc,local,h,m);
   selected=pc; pendingLocal=local;
-  if(!h.valid || (!local && queued)){ uncertain=true; return {}; }
   const int q=active>=0?m.queue[active]:0;
+  // Without a configured cycle, R10 defines the next AUM bar as the
+  // boundary, including for incoming queued PC. Only a custom external
+  // Circuit cycle still needs phase evidence beyond the host timeline.
+  if(!h.valid || (!local && queued && q>0)){ uncertain=true; return {}; }
   if(q>0){
    if(!phaseKnown){uncertain=true;return {};}
    due=anchor+(std::floor((h.beat-anchor)/q)+1)*q;
@@ -58,6 +61,8 @@ public:
   lastBeat=h.beat;haveBeat=true;
   if(selected>=0 && !uncertain && h.beat>=due){
    auto a=activate(selected,pendingLocal,h,m);
+   // A scheduled boundary is an AUM estimate, not Circuit confirmation.
+   estimated=true;
    // Keep the scheduled musical boundary, not the later render observation, as cycle origin.
    anchor=due;if(ramp)rampStart=due;
    return a;

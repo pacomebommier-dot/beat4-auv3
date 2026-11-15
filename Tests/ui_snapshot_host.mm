@@ -90,7 +90,10 @@
   }
   AURenderEvent event{};event.head.eventType=AURenderEventMIDI;event.head.eventSampleTime=AUEventSampleTimeImmediate;
   event.MIDI.length=2;event.MIDI.data[0]=0xCF;event.MIDI.data[1]=103;input=&event;tick();
-  assert(unit.currentProgram==7 && [unit.transportSnapshot[@"uncertain"] boolValue] && messages.count==1);
+  assert(unit.currentProgram==7 && ![unit.transportSnapshot[@"uncertain"] boolValue] && messages.count==1);
+  input=nullptr;beat=3.99;tick();assert(unit.currentProgram==7);
+  beat=4;tick();assert(unit.currentProgram==39 && messages.count==1);
+  input=&event;
   event.MIDI.data[1]=39;tick();assert(unit.currentProgram==39 && messages.count==1);input=nullptr;
   [unit requestTransportToggle];tick();tick();
   NSArray *stopPress=@[@191,@111,@127],*stopRelease=@[@191,@111,@0];
@@ -133,6 +136,10 @@
   event.MIDI.data[0]=0xF8;for(int n=0;n<100;++n)tick();
   assert(messages.count==beforeTransport+4); // no clock/transport echo on either cable
   input=nullptr;
+  NSDictionary *diagnostic=unit.transportSnapshot;
+  assert([diagnostic[@"receivedStart"] intValue]==6 && [diagnostic[@"receivedStop"] intValue]==5);
+  assert([diagnostic[@"sentTransport"] intValue]==4 && [diagnostic[@"lastRealtime"] intValue]==0xFB);
+  assert([diagnostic[@"awaitingTransport"] intValue]==-1);
   for(NSDictionary *message in messages){
    NSArray *bytes=message[@"bytes"];
    assert(([bytes[0] intValue]&0xF0)!=0xE0); // no pitch bend on either output

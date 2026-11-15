@@ -24,6 +24,8 @@ struct State {
     std::atomic<uint64_t> sequence{0}, tick{0}, callbacks{0}, revision{1};
     std::atomic<double> sampleRate{48000};
     std::atomic<int> localStop{0}, transportStatus{0};
+    std::atomic<uint64_t> receivedStart{0},receivedStop{0},sentTransport{0};
+    std::atomic<int> lastRealtime{-1},awaitingTransport{-1};
     std::atomic<uint64_t> invalidTimestamps{0};
     std::atomic<double> beat{0}, bpm{0}, samplePosition{0}, bufferSeconds{0.005};
     std::atomic<int> numerator{4}, denominator{4}, mode{0};
@@ -280,6 +282,12 @@ Snapshot load(const State& s) noexcept {
             // Realtime transport is one byte, without a MIDI channel. Never
             // forward clock or raw transport to Circuit Projects: AUM owns it.
             if(e->MIDI.length==1){
+                const auto status=e->MIDI.data[0];
+                if(status==0xFA || status==0xFB || status==0xFC){
+                    s->lastRealtime.store(status);
+                    if(status==0xFC)s->receivedStop.fetch_add(1);else s->receivedStart.fetch_add(1);
+                    s->journal.write(8,status,0,beat);
+                }
                 s->transportPulse.receive(e->MIDI.data[0]);
                 continue;
             }
@@ -302,10 +310,15 @@ Snapshot load(const State& s) noexcept {
             if(message.length){
                 const auto status=midiOut(sampleTime,message.cable,message.length,message.bytes.data());
                 s->transportStatus.store(status);
+                if(status==noErr && message.bytes[2]==127){
+                    s->sentTransport.fetch_add(1);
+                    s->journal.write(9,message.bytes[1],3,beat);
+                }
                 if(status!=noErr)s->journal.write(6,s->engine.active,3,beat);
                 if(status==noErr && message.bytes[2]==127)s->localStop.store(message.bytes[1]==111);
             }
         }
+        s->awaitingTransport.store(s->transportPulse.awaitingTarget());
         if(moving && !s->moving.load())s->localStop.store(0);
         const bool canPlay=moving && musicalOK && sampleRate>0 && std::isfinite(beat) &&
                 std::isfinite(tempo) && tempo>0 && beatsPerBar==4 && denominator==4;
@@ -389,6 +402,9 @@ Snapshot load(const State& s) noexcept {
              @"selectedPC":@(s.selected),@"uncertain":@(s.uncertain),@"estimated":@(s.estimated),
              @"globalMode":@(_state->globalMode.load()),@"displayBeat":@(projected),
              @"localStop":@(_state->localStop.load()),@"transportStatus":@(_state->transportStatus.load()),
+             @"receivedStart":@(_state->receivedStart.load()),@"receivedStop":@(_state->receivedStop.load()),
+             @"sentTransport":@(_state->sentTransport.load()),@"lastRealtime":@(_state->lastRealtime.load()),
+             @"awaitingTransport":@(_state->awaitingTransport.load()),
              @"invalidTimestamps":@(_state->invalidTimestamps.load()),@"renderAge":@(age),@"renderSampleRate":@(_state->sampleRate.load()),
              @"transportCallback":@(_cachedTransport!=nil),@"musicalCallback":@(_cachedMusical!=nil),
              @"transportValid":@(s.transportValid),@"musicalValid":@(s.musicalValid)};

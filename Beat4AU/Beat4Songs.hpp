@@ -64,6 +64,7 @@ class TransportPulse {
   target=desired;pending=play?110:111;
  }
 public:
+ int awaitingTarget() const noexcept {return target;}
  void observe(bool valid,bool moving) noexcept {
   if(!valid)return;
   observed=moving?1:0;
