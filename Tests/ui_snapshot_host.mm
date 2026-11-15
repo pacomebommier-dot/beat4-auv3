@@ -113,6 +113,26 @@
   }
   const NSUInteger beforeUnknown=messages.count;
   [unit selectProgram:3];tick();assert(messages.count==beforeUnknown+1); // PC only
+  // Real single-byte render events from Circuit. Host changes are applied
+  // separately, reproducing the delay between a CC request and its observation.
+  moving=YES;tick(); // acknowledge the preceding local START
+  const NSUInteger beforeTransport=messages.count;
+  event.MIDI.length=1;event.MIDI.data[0]=0xFC;input=&event;
+  tick();tick();tick(); // duplicate STOP before acknowledgement: one press/release
+  assert(messages.count==beforeTransport+2);
+  assert([messages[beforeTransport][@"cable"] intValue]==0);
+  assert([messages[beforeTransport][@"bytes"] isEqual:stopPress]);
+  assert([messages[beforeTransport+1][@"bytes"] isEqual:stopRelease]);
+  moving=NO;tick();tick();assert(messages.count==beforeTransport+2);
+  event.MIDI.data[0]=0xFA;tick();tick();tick();
+  assert(messages.count==beforeTransport+4);
+  assert([messages[beforeTransport+2][@"bytes"] isEqual:playPress]);
+  assert([messages[beforeTransport+3][@"bytes"] isEqual:playRelease]);
+  moving=YES;tick();tick(); // simulated Circuit echo after AUM START
+  event.MIDI.data[0]=0xFB;tick(); // continue while already playing
+  event.MIDI.data[0]=0xF8;for(int n=0;n<100;++n)tick();
+  assert(messages.count==beforeTransport+4); // no clock/transport echo on either cable
+  input=nullptr;
   for(NSDictionary *message in messages){
    NSArray *bytes=message[@"bytes"];
    assert(([bytes[0] intValue]&0xF0)!=0xE0); // no pitch bend on either output

@@ -234,6 +234,7 @@ Snapshot load(const State& s) noexcept {
             std::isfinite(beat) && std::abs(beat)<1e10 && std::isfinite(beatsPerBar) &&
             beatsPerBar>0 && beatsPerBar<=128 && denominator>0 && denominator<=128;
         const bool moving=transportOK && (flags & AUHostTransportStateMoving);
+        s->transportPulse.observe(transportOK,moving);
         const bool changed=transportOK && (flags & AUHostTransportStateChanged);
         const auto mode=memory->observe({transportOK,musicalOK,moving,changed,beat,sample});
         const bool positionOK=transportOK && musicalOK && std::isfinite(beat) &&
@@ -275,7 +276,13 @@ Snapshot load(const State& s) noexcept {
                     {s->kickEnabled.store(e->parameter.value>=.5f);s->revision.fetch_add(1);}
                 continue;
             }
-            if(e->head.eventType!=AURenderEventMIDI || e->MIDI.length<2)continue;
+            if(e->head.eventType!=AURenderEventMIDI || e->MIDI.length<1)continue;
+            // Realtime transport is one byte, without a MIDI channel. Never
+            // forward clock or raw transport to Circuit Projects: AUM owns it.
+            if(e->MIDI.length==1){
+                s->transportPulse.receive(e->MIDI.data[0]);
+                continue;
+            }
             int raw=-1;
             if(beat4::isCircuitProgramChange(e->MIDI.data[0],e->MIDI.data[1],raw)){
                 s->journal.write(1,raw,0,beat);
