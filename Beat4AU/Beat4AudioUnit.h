@@ -18,6 +18,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)selectProgram:(NSInteger)pc;
 - (void)setGlobalMode:(NSInteger)mode;
 - (void)saveCurrentMode;
+- (void)saveMode:(NSInteger)mode program:(NSInteger)pc;
 - (NSDictionary *)songForProgram:(NSInteger)pc;
 - (void)saveQueue:(NSInteger)beats program:(NSInteger)pc;
 @end

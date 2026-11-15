@@ -461,9 +461,14 @@ Snapshot load(const State& s) noexcept {
     [[NSUserDefaults standardUserDefaults] setInteger:mode forKey:@"beat4.globalMode"];
 }
 - (void)saveCurrentMode {
-    NSInteger pc=[self currentProgram];if(pc<0 || pc>=64)return;
-    NSMutableDictionary *entry=[[self currentSong] mutableCopy];
-    entry[@"pcMode"]=@(_state->globalMode.load());[self persistSong:entry program:pc];
+    const auto snapshot=load(*_state);
+    NSInteger pc=snapshot.selected>=0?snapshot.selected:snapshot.pg;
+    [self saveMode:_state->globalMode.load() program:pc];
+}
+- (void)saveMode:(NSInteger)mode program:(NSInteger)pc {
+    if(pc<0 || pc>=64 || mode < -1 || mode > 2)return;
+    NSMutableDictionary *entry=[[self songForProgram:pc] mutableCopy];
+    entry[@"pcMode"]=@(mode);[self persistSong:entry program:pc];
 }
 - (NSDictionary*)songForProgram:(NSInteger)pc {
     return _songCache[[NSString stringWithFormat:@"%ld",(long)pc]] ?: @{@"title":@"UNKNOWN",@"bpm":@0,@"sub":@(-1)};

@@ -125,7 +125,7 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     _logo.accessibilityLabel=@"BEAT//4, diagnostic MIDI";
     _logo.accessibilityTraits=UIAccessibilityTraitButton;
     [_logo addGestureRecognizer:[[UITapGestureRecognizer alloc]initWithTarget:self action:@selector(showMIDIDiagnostic:)]];
-    _versionLabel=[self makeLabel:[NSString stringWithFormat:@"v%@",[NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"0.5.11"] size:8 color:RGB(122,145,121)];
+    _versionLabel=[self makeLabel:[NSString stringWithFormat:@"v%@",[NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"0.5.12"] size:8 color:RGB(122,145,121)];
     _modeLabel=[self makeLabel:@"TEMPO MODE" size:10 color:RGB(197,208,197)];
     _pcModeLabel=[self makeLabel:@"" size:10 color:RGB(132,157,136)];
     _host=[self makeLabel:@"AUM  •  WAIT" size:11 color:RGB(144,161,140)];_host.textAlignment=NSTextAlignmentRight;
@@ -257,7 +257,9 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     NSInteger selected=[state[@"selectedPC"] integerValue];
     NSString *active=pg<0?@"ACTIVE —":[NSString stringWithFormat:@"ACTIVE PC %02ld%@",(long)pg+1,[state[@"estimated"] boolValue]?@" (estimé)":@""];
     NSString *pending=selected<0?@"":[NSString stringWithFormat:@" · SELECTED %02ld%@",(long)selected+1,[state[@"uncertain"] boolValue]?@" PHASE ?":@""];
-    NSString *saved=song[@"pcMode"] && [song[@"pcMode"] intValue]>=0?[NSString stringWithFormat:@" · PC MODE %@",song[@"pcMode"]]:@"";
+    NSDictionary *destination=selected>=0?[self.unit songForProgram:selected]:song;
+    int destinationMode=destination[@"pcMode"]?[destination[@"pcMode"] intValue]:-1;
+    NSString *saved=destinationMode<0?@"UNKNOWN · FIN + 1 BAR":destinationMode==0?@"MODE 0 · Q 0":destinationMode==1?@"MODE 1 · Q 4 BARS":@"MODE 2 · Q 1 BAR";
     _pgLabel.text=[NSString stringWithFormat:@"%@%@",active,pending];
     _pcModeLabel.text=[saved stringByReplacingOccurrencesOfString:@" · " withString:@""];
     BOOL configured=pg>=0;
@@ -337,21 +339,20 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
 - (void)editQueue:(id)sender {
     (void)sender;const NSInteger pc=self.editedPC;
     UIAlertController *a=[UIAlertController alertControllerWithTitle:[NSString stringWithFormat:@"QUEUE · SONG %02ld",(long)pc+1]
-        message:@"Beats entiers. Vide = prochain BAR AUM. Appui long sur un pad pour éditer sans l’activer."
+        message:@"Attente propre au projet qui arrive. UNKNOWN : fin de mesure + une mesure entière. Tempo progressif dès la sélection."
         preferredStyle:UIAlertControllerStyleAlert];
-    [a addTextFieldWithConfigurationHandler:^(UITextField *t){
-        t.keyboardType=UIKeyboardTypeNumberPad;int q=[[self.unit songForProgram:pc][@"queue"] intValue];
-        t.text=q>0?[NSString stringWithFormat:@"%d",q]:@"";t.placeholder=@"—";
-    }];
-    [a addAction:[UIAlertAction actionWithTitle:@"Annuler" style:UIAlertActionStyleCancel handler:nil]];
     __weak Beat4ViewController *weakSelf=self;
-    [a addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){
-        (void)action;NSString *v=a.textFields.firstObject.text ?: @"";
-        NSScanner *scanner=[NSScanner scannerWithString:v];long long n=0;
-        if(v.length && (![scanner scanLongLong:&n] || !scanner.isAtEnd || n<1 || n>65536))return;
-        [weakSelf.unit saveQueue:(NSInteger)n program:pc];[weakSelf refreshPage];
-    }]];[self presentViewController:a animated:YES completion:nil];
+    NSArray *titles=@[@"UNKNOWN · fin + 1 mesure",@"MODE 0 · immédiat",@"MODE 1 · 4 mesures",@"MODE 2 · 1 mesure"];
+    for(NSInteger i=0;i<4;++i){
+        const NSInteger mode=i-1;
+        [a addAction:[UIAlertAction actionWithTitle:titles[i] style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){
+            (void)action;[weakSelf.unit saveMode:mode program:pc];[weakSelf refreshPage];[weakSelf refreshSong];
+        }]];
+    }
+    [a addAction:[UIAlertAction actionWithTitle:@"Annuler" style:UIAlertActionStyleCancel handler:nil]];
+    [self presentViewController:a animated:YES completion:nil];
 }
+
 - (void)refreshPage {
     if(self.canvas.showBars!=(self.page==0)){self.canvas.showBars=self.page==0;[self.canvas setNeedsDisplay];}
     NSDictionary *state=self.frameSnapshot ?: [self.unit transportSnapshot];
@@ -364,8 +365,10 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
         pad.accessibilityLabel=[NSString stringWithFormat:@"SONG %02d %@",pc+1,pc==active?@"ACTIF":pc==selected?@"SÉLECTIONNÉ":@"ÉTEINT"];
     }
     _queueButton.hidden=self.page==0;
-    int q=[[self.unit songForProgram:self.editedPC][@"queue"] intValue];
-    [_queueButton setTitle:[NSString stringWithFormat:@"SONG %02ld · QUEUE %@",(long)self.editedPC+1,q>0?[NSString stringWithFormat:@"%d",q]:@"—"] forState:UIControlStateNormal];
+    NSDictionary *entry=[self.unit songForProgram:self.editedPC];
+    int mode=entry[@"pcMode"]?[entry[@"pcMode"] intValue]:-1;
+    NSString *queue=mode<0?@"FIN + 1 BAR":mode==0?@"0":mode==1?@"4 BARS":@"1 BAR";
+    [_queueButton setTitle:[NSString stringWithFormat:@"SONG %02ld · Q %@",(long)self.editedPC+1,queue] forState:UIControlStateNormal];
 }
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];

@@ -92,7 +92,8 @@
   event.MIDI.length=2;event.MIDI.data[0]=0xCF;event.MIDI.data[1]=103;input=&event;tick();
   assert(unit.currentProgram==7 && ![unit.transportSnapshot[@"uncertain"] boolValue] && messages.count==1);
   input=nullptr;beat=3.99;tick();assert(unit.currentProgram==7);
-  beat=4;tick();assert(unit.currentProgram==39 && messages.count==1);
+  beat=4;tick();assert(unit.currentProgram==7 && messages.count==1);
+  beat=8;tick();assert(unit.currentProgram==39 && messages.count==1);
   input=&event;
   event.MIDI.data[1]=39;tick();assert(unit.currentProgram==39 && messages.count==1);input=nullptr;
   [unit requestTransportToggle];tick();tick();
@@ -144,6 +145,22 @@
    NSArray *bytes=message[@"bytes"];
    assert(([bytes[0] intValue]&0xF0)!=0xE0); // no pitch bend on either output
   }
+  // Native AU regression: selection starts tempo during queue and SAVE edits destination.
+  input=nullptr;moving=NO;tick();[unit selectProgram:10];tick();
+  [unit saveSongBPM:148 program:11];
+  moving=YES;beat=33;tick();[unit selectProgram:11];tick();
+  assert(unit.currentProgram==10 && [unit.transportSnapshot[@"selectedPC"] intValue]==11);
+  [unit setGlobalMode:2];[unit saveCurrentMode];
+  assert([unit songForProgram:11][@"pcMode"] && [[unit songForProgram:11][@"pcMode"] intValue]==2);
+  assert(![unit songForProgram:10][@"pcMode"] || [[unit songForProgram:10][@"pcMode"] intValue]<0);
+  const NSUInteger rampBefore=messages.count;beat=35;tick();
+  assert(messages.count>rampBefore && unit.currentProgram==10);
+  assert([messages.lastObject[@"bytes"] isEqual:(@[@190,@118,@83])]); // 133 BPM during queue
+  beat=40;tick();assert(unit.currentProgram==11); // frozen unknown deadline: finish + one full bar
+  beat=41;tick();assert([messages.lastObject[@"bytes"] isEqual:(@[@190,@118,@98])]); // 148 BPM
+  [unit selectProgram:12];tick();[unit setGlobalMode:0];[unit saveCurrentMode];
+  assert([[unit songForProgram:12][@"pcMode"] intValue]==0);
+  [unit selectProgram:12];tick();assert(unit.currentProgram==12);
   NSData *trace=[NSJSONSerialization dataWithJSONObject:@{@"host":@"SIMULATED",@"midiOutput":messages,@"journal":unit.diagnosticLog} options:NSJSONWritingPrettyPrinted error:&error];
   assert(trace && !error && [trace writeToFile:[directory stringByAppendingPathComponent:@"mock-host-midi-trace.json"] atomically:YES]);
   // A host may query the block before negotiation and install callbacks after allocation.
