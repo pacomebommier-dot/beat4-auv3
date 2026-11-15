@@ -26,3 +26,17 @@ The relay has no origin identifier and cannot distinguish an arbitrarily delayed
 opposite echo from intentional input. Same-state duplicates are suppressed both
 before and after host acknowledgement. Confirm physical behaviour in step 3.
 No automatic retransmission when AUM does not acknowledge a command.
+
+## Automated delivery evidence
+
+Code: 0dbbd0c56cba42b9909953f429f571d813bd946a, draft PR 5.
+CI run 43711164366: SUCCESS (15 portable executables, full ASan/UBSan,
+native persistence, iOS app/extension compilation, 12 UIKit captures with
+native AU MIDI assertions, and IPA verifier).
+https://github.com/pacomebommier-dot/beat4-auv3/actions/runs/43711164366
+
+Unsigned IPA artifact: 14159849631, BEAT4-R10-V0-5-10-UNSIGNED-IPA.
+IPA SHA256: 124abb6f259f877b528082aa1968ce7be08fcaca9112bf2d726cae6262018fb4.
+Apple signing and the physical recipe remain unexecuted here.
+Artifact download into this workspace returned Forbidden from Azure Blob;
+therefore no copy of this IPA was uploaded to Drive by this session.

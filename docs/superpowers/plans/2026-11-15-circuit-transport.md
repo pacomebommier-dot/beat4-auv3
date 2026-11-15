@@ -10,5 +10,5 @@ Spec: ../specs/2026-11-15-circuit-transport-design.md
   opposite requests while pending, Continue and ignored clock.
 - [x] Extend native AU render harness for one-byte input, CC output and feedback.
 - [x] Run full portable suite (15 executables) and packaging regression. ASan/UBSan pass locally with leak detection disabled: LeakSanitizer cannot run under workspace ptrace. CI retains full sanitizers.
-- [ ] Compile iOS app/extension and execute native harness through CI.
+- [x] Compile iOS app/extension and execute native harness through CI: run 43711164366 SUCCESS for code 0dbbd0c.
 - [ ] Validate on physical AUM/Circuit (user hardware).
