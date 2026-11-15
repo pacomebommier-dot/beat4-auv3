@@ -125,7 +125,7 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     _logo.accessibilityLabel=@"BEAT//4, diagnostic MIDI";
     _logo.accessibilityTraits=UIAccessibilityTraitButton;
     [_logo addGestureRecognizer:[[UITapGestureRecognizer alloc]initWithTarget:self action:@selector(showMIDIDiagnostic:)]];
-    _versionLabel=[self makeLabel:[NSString stringWithFormat:@"v%@",[NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"0.5.12"] size:8 color:RGB(122,145,121)];
+    _versionLabel=[self makeLabel:[NSString stringWithFormat:@"v%@",[NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"0.5.13"] size:8 color:RGB(122,145,121)];
     _modeLabel=[self makeLabel:@"TEMPO MODE" size:10 color:RGB(197,208,197)];
     _pcModeLabel=[self makeLabel:@"" size:10 color:RGB(132,157,136)];
     _host=[self makeLabel:@"AUM  •  WAIT" size:11 color:RGB(144,161,140)];_host.textAlignment=NSTextAlignmentRight;
@@ -172,9 +172,9 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     }
     _queueButton=[self makeButton:@"QUEUE —" size:10];
     [_queueButton addTarget:self action:@selector(editQueue:) forControlEvents:UIControlEventTouchUpInside];
-    _modeControl=[[UISegmentedControl alloc]initWithItems:@[@"0",@"1",@"2"]];
-    _modeControl.selectedSegmentIndex=[[self.unit transportSnapshot][@"globalMode"] integerValue];
-    _modeControl.accessibilityLabel=@"MODE global";
+    _modeControl=[[UISegmentedControl alloc]initWithItems:@[@"16",@"32"]];
+    _modeControl.selectedSegmentIndex=[[self.unit transportSnapshot][@"cycleSteps"] integerValue]==32?1:0;
+    _modeControl.accessibilityLabel=@"Cycle Drum 1 : 16 ou 32 steps";
     [_modeControl addTarget:self action:@selector(modeChanged:) forControlEvents:UIControlEventValueChanged];
     [self.view addSubview:_modeControl];
     _saveButton=[self makeButton:@"SAVE" size:10];
@@ -257,9 +257,9 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     NSInteger selected=[state[@"selectedPC"] integerValue];
     NSString *active=pg<0?@"ACTIVE —":[NSString stringWithFormat:@"ACTIVE PC %02ld%@",(long)pg+1,[state[@"estimated"] boolValue]?@" (estimé)":@""];
     NSString *pending=selected<0?@"":[NSString stringWithFormat:@" · SELECTED %02ld%@",(long)selected+1,[state[@"uncertain"] boolValue]?@" PHASE ?":@""];
-    NSDictionary *destination=selected>=0?[self.unit songForProgram:selected]:song;
-    int destinationMode=destination[@"pcMode"]?[destination[@"pcMode"] intValue]:-1;
-    NSString *saved=destinationMode<0?@"UNKNOWN · FIN + 1 BAR":destinationMode==0?@"MODE 0 · Q 0":destinationMode==1?@"MODE 1 · Q 4 BARS":@"MODE 2 · Q 1 BAR";
+    const int steps=[song[@"steps"] intValue]==32?32:16;
+    NSString *saved=[NSString stringWithFormat:@"ACTIF · %d STEPS",steps];
+    _modeControl.selectedSegmentIndex=[state[@"cycleSteps"] intValue]==32?1:0;
     _pgLabel.text=[NSString stringWithFormat:@"%@%@",active,pending];
     _pcModeLabel.text=[saved stringByReplacingOccurrencesOfString:@" · " withString:@""];
     BOOL configured=pg>=0;
@@ -322,8 +322,8 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
 }
 - (void)levelChanged:(UISlider*)sender {[self.unit setKickLevel:sender.value];}
 - (void)toggleTransport:(id)sender {(void)sender;[self.unit requestTransportToggle];}
-- (void)modeChanged:(UISegmentedControl*)sender {[self.unit setGlobalMode:sender.selectedSegmentIndex];}
-- (void)saveMode:(id)sender {(void)sender;[self.unit saveCurrentMode];[self refreshSong];}
+- (void)modeChanged:(UISegmentedControl*)sender {[self.unit setCycleSteps:sender.selectedSegmentIndex==1?32:16];}
+- (void)saveMode:(id)sender {(void)sender;[self.unit saveCurrentCycle];[self refreshSong];}
 - (void)swipePage:(UISwipeGestureRecognizer*)gesture {
     self.page=beat4::nextPage((int)self.page,gesture.direction==UISwipeGestureRecognizerDirectionLeft?1:-1);
     [self refreshPage];
@@ -339,14 +339,14 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
 - (void)editQueue:(id)sender {
     (void)sender;const NSInteger pc=self.editedPC;
     UIAlertController *a=[UIAlertController alertControllerWithTitle:[NSString stringWithFormat:@"QUEUE · SONG %02ld",(long)pc+1]
-        message:@"Attente propre au projet qui arrive. UNKNOWN : fin de mesure + une mesure entière. Tempo progressif dès la sélection."
+        message:@"Le cycle du projet ACTIF détermine l’attente : 16 steps = 1 mesure, 32 = 2 mesures. Par défaut : 16. Tempo progressif dès la sélection."
         preferredStyle:UIAlertControllerStyleAlert];
     __weak Beat4ViewController *weakSelf=self;
-    NSArray *titles=@[@"UNKNOWN · fin + 1 mesure",@"MODE 0 · immédiat",@"MODE 1 · 4 mesures",@"MODE 2 · 1 mesure"];
-    for(NSInteger i=0;i<4;++i){
-        const NSInteger mode=i-1;
+    NSArray *titles=@[@"16 steps · 1 mesure",@"32 steps · 2 mesures"];
+    for(NSInteger i=0;i<2;++i){
+        const NSInteger steps=i==1?32:16;
         [a addAction:[UIAlertAction actionWithTitle:titles[i] style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){
-            (void)action;[weakSelf.unit saveMode:mode program:pc];[weakSelf refreshPage];[weakSelf refreshSong];
+            (void)action;[weakSelf.unit saveCycleSteps:steps program:pc];[weakSelf refreshPage];[weakSelf refreshSong];
         }]];
     }
     [a addAction:[UIAlertAction actionWithTitle:@"Annuler" style:UIAlertActionStyleCancel handler:nil]];
@@ -366,8 +366,7 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     }
     _queueButton.hidden=self.page==0;
     NSDictionary *entry=[self.unit songForProgram:self.editedPC];
-    int mode=entry[@"pcMode"]?[entry[@"pcMode"] intValue]:-1;
-    NSString *queue=mode<0?@"FIN + 1 BAR":mode==0?@"0":mode==1?@"4 BARS":@"1 BAR";
+    NSString *queue=[entry[@"steps"] intValue]==32?@"32 STEPS":@"16 STEPS";
     [_queueButton setTitle:[NSString stringWithFormat:@"SONG %02ld · Q %@",(long)self.editedPC+1,queue] forState:UIControlStateNormal];
 }
 - (void)viewWillAppear:(BOOL)animated {

@@ -6,8 +6,8 @@ int main(){
  ProgramEngine e;ProgramMemory m;HostPosition h{true,false,0,0,4,128};
  auto r=e.request(7,false,false,h,m);assert(e.active==7&&r.activated==7&&!r.sendPC);
  h={true,true,1,0,4,128};e.advance(h,m);e.request(39,true,false,h,m);
- h.beat=4;assert(e.advance(h,m).activated<0);
- h.beat=8;r=e.advance(h,m);assert(r.activated==39&&r.sendPC&&e.selected<0);
+ h.beat=3.99;assert(e.advance(h,m).activated<0);
+ h.beat=4;r=e.advance(h,m);assert(r.activated==39&&r.sendPC&&e.selected<0);
  h.valid=false;e.request(6,true,false,h,m);assert(e.selected==6&&e.uncertain);
  h.valid=true;h.beat=9;h.barStart=8;e.advance(h,m);h.beat=16;assert(e.advance(h,m).activated==6);
  ProgramEngine order;HostPosition held{true,false,0,0,4,128};order.request(0,false,false,held,m);

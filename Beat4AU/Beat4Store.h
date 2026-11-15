@@ -18,6 +18,7 @@ inline NSMutableDictionary *loadSongStore(NSUserDefaults *defaults){
   int sub=(int)storedNumber(entry[@"sub"],-1);
   result[key]=@{@"title":[entry[@"title"] isKindOfClass:NSString.class]?entry[@"title"]:@"UNKNOWN",
     @"bpm":@(storedBPM(storedNumber(entry[@"bpm"]))),@"sub":@(validSub(sub)?sub:-1),
+    @"steps":@(storedNumber(entry[@"steps"],16)==32?32:16),
     @"queue":@(storedQueue((int)storedNumber(entry[@"queue"]))),
     @"pcMode":@(storedMode((int)storedNumber(entry[@"pcMode"],-1)))};
  }];return result;

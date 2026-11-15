@@ -5,10 +5,10 @@
 #include "Beat4Songs.hpp"
 namespace beat4 {
 struct ProgramMemory {
- std::array<int,64> queue{}, mode{};
+ std::array<int,64> queue{}, mode{}, steps{};
  std::array<double,64> bpm{};
  int globalMode=0;
- ProgramMemory(){ mode.fill(-1); }
+ ProgramMemory(){ mode.fill(-1); steps.fill(16); }
 };
 // beat and barStart use AU musical-context quarter-note units.
 struct HostPosition { bool valid=false, moving=false; double beat=0, barStart=0, barLength=4, bpm=0; };
@@ -44,23 +44,26 @@ public:
    return activate(pc,false,h,m);
   }
   if(valid(h)){
+   ensureCycle(h);
    if(!preserveRamp)beginTempo(pc,h,m);
-   if(!h.moving||m.mode[pc]==0)return activate(pc,local,h,m);
+   if(!h.moving)return activate(pc,local,h,m);
   }
   selected=pc;
-  if(!valid(h)){uncertain=true;return {};}
+  if(!valid(h)){uncertain=true;cycleKnown=false;wasMoving=false;return {};}
   schedule(h,m);lastBeat=h.beat;haveBeat=true;
   return {-1,false,tempoAt(h.beat)};
  }
  ProgramAction advance(const HostPosition& h,const ProgramMemory& m) noexcept {
   if(!valid(h)){
-   ramp=false;if(selected>=0)uncertain=true;haveBeat=false;return {};
+   ramp=false;if(selected>=0)uncertain=true;haveBeat=false;cycleKnown=false;wasMoving=false;return {};
   }
   if(!h.moving){
-   selected=-1;uncertain=false;ramp=false;outputBlocked=false;
+   selected=-1;uncertain=false;ramp=false;outputBlocked=false;cycleKnown=false;wasMoving=false;
    lastBeat=h.beat;haveBeat=true;return {};
   }
+  ensureCycle(h);
   if(haveBeat&&h.beat<lastBeat-1e-7){
+   cycleOrigin=h.barStart;cycleKnown=true;
    ramp=false;if(selected>=0&&!outputBlocked)schedule(h,m);
   }
   lastBeat=h.beat;haveBeat=true;
@@ -68,22 +71,34 @@ public:
    beginTempo(selected,h,m);schedule(h,m);
   }
   if(selected>=0&&!uncertain&&h.beat>=due){
-   auto a=activate(selected,pendingLocal,h,m);estimated=true;return a;
+   const double boundary=due;
+   auto a=activate(selected,pendingLocal,h,m);cycleOrigin=boundary;cycleKnown=true;estimated=true;return a;
   }
   return {-1,false,tempoAt(h.beat)};
  }
 private:
- bool pendingLocal=false,haveBeat=false,ramp=false,outputBlocked=false;
- double due=0,lastBeat=0,rampStart=0,rampLength=0,startBPM=0,targetBPM=0;
+ bool pendingLocal=false,haveBeat=false,ramp=false,outputBlocked=false,cycleKnown=false,wasMoving=false;
+ double cycleOrigin=0,due=0,lastBeat=0,rampStart=0,rampLength=0,startBPM=0,targetBPM=0;
  static bool valid(const HostPosition& h) noexcept {
   return h.valid&&std::isfinite(h.beat)&&std::isfinite(h.barStart)&&
    std::isfinite(h.barLength)&&h.barLength>0&&std::isfinite(h.bpm)&&h.bpm>0;
  }
+ void ensureCycle(const HostPosition& h) noexcept {
+  if(h.moving){
+   if(!wasMoving||!cycleKnown){cycleOrigin=h.barStart;cycleKnown=true;}
+   if(haveBeat&&h.beat<lastBeat-1e-7){cycleOrigin=h.barStart;cycleKnown=true;ramp=false;}
+   wasMoving=true;
+  } else {wasMoving=false;cycleKnown=false;}
+ }
  void schedule(const HostPosition& h,const ProgramMemory& m) noexcept {
-  const int mode=m.mode[selected];
-  const int boundaries=mode==1?4:mode==2?1:mode==0?0:2;
-  const double next=h.barStart+(std::floor((h.beat-h.barStart)/h.barLength)+1)*h.barLength;
-  due=boundaries==0?h.beat:next+(boundaries-1)*h.barLength;
+  const bool twoBars=active>=0&&m.steps[active]==32;
+  if(twoBars){
+   const double length=2*h.barLength;
+   const double origin=cycleKnown?cycleOrigin:h.barStart;
+   due=origin+(std::floor((h.beat-origin)/length)+1)*length;
+  } else {
+   due=h.barStart+(std::floor((h.beat-h.barStart)/h.barLength)+1)*h.barLength;
+  }
   uncertain=false;
  }
  void beginTempo(int pc,const HostPosition& h,const ProgramMemory& m) noexcept {
@@ -100,10 +115,12 @@ private:
   return value;
  }
  ProgramAction activate(int pc,bool local,const HostPosition& h,const ProgramMemory& m) noexcept {
+  const bool changed=active!=pc;
   active=pc;selected=-1;uncertain=false;estimated=local;
   ProgramAction a{pc,local,valid(h)?tempoAt(h.beat):0};
-  if(!valid(h)){ramp=false;haveBeat=false;return a;}
-  if(!h.moving){ramp=false;if(validBPM(m.bpm[pc]))a.tempo=m.bpm[pc];}
+  if(!valid(h)){ramp=false;haveBeat=false;cycleKnown=false;wasMoving=false;return a;}
+  if(!h.moving){ramp=false;cycleKnown=false;wasMoving=false;if(validBPM(m.bpm[pc]))a.tempo=m.bpm[pc];}
+  else if(changed||!cycleKnown){cycleOrigin=h.beat;cycleKnown=true;wasMoving=true;}
   return a;
  }
 };

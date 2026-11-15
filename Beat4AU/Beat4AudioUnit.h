@@ -16,9 +16,9 @@ NS_ASSUME_NONNULL_BEGIN
 - (NSArray *)diagnosticLog;
 - (void)requestTransportToggle;
 - (void)selectProgram:(NSInteger)pc;
-- (void)setGlobalMode:(NSInteger)mode;
-- (void)saveCurrentMode;
-- (void)saveMode:(NSInteger)mode program:(NSInteger)pc;
+- (void)setCycleSteps:(NSInteger)steps;
+- (void)saveCurrentCycle;
+- (void)saveCycleSteps:(NSInteger)steps program:(NSInteger)pc;
 - (NSDictionary *)songForProgram:(NSInteger)pc;
 - (void)saveQueue:(NSInteger)beats program:(NSInteger)pc;
 @end

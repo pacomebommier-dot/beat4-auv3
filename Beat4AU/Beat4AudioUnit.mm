@@ -35,8 +35,8 @@ struct State {
     std::array<std::atomic<double>,128> tempos;
     std::atomic<float> kickLevel{0.60f};
     std::atomic<bool> kickEnabled{false}; // OFF at first boot: no surprising audio.
-    std::array<std::atomic<int>,128> queues, pcModes;
-    std::atomic<int> globalMode{0}, localPC{-1}, selectedPC{-1}, transportRequest{-1};
+    std::array<std::atomic<int>,128> queues, cycleSteps;
+    std::atomic<int> draftSteps{16}, localPC{-1}, selectedPC{-1}, transportRequest{-1};
     std::atomic<bool> uncertain{false},estimated{false};
     beat4::TransportPulse transportPulse;
     beat4::Journal journal;
@@ -44,7 +44,7 @@ struct State {
     beat4::ProgramMemory memories;
     double lastTempoSent=0;
     std::atomic<bool> midiOutputConfigured{false};
-    State() {for(int i=0;i<128;++i){notes[i].store(-1);tempos[i].store(0);queues[i].store(0);pcModes[i].store(-1);}}
+    State() {for(int i=0;i<128;++i){notes[i].store(-1);tempos[i].store(0);queues[i].store(0);cycleSteps[i].store(16);}}
 };
 // Stable, realtime-readable callback slots. Host callbacks are installed during
 // allocateRenderResources, which can occur after internalRenderBlock is queried.
@@ -59,6 +59,7 @@ struct Snapshot {
     int numerator, denominator, mode, pg, selected;
     bool uncertain,estimated;
     bool transportValid, musicalValid, moving, transportChanged;
+    int cycleSteps;
 };
 Snapshot load(const State& s) noexcept {
     Snapshot result{};
@@ -71,7 +72,7 @@ Snapshot load(const State& s) noexcept {
                 s.numerator.load(std::memory_order_relaxed), s.denominator.load(std::memory_order_relaxed),
                 s.mode.load(std::memory_order_relaxed), s.currentPG.load(),s.selectedPC.load(),s.uncertain.load(),s.estimated.load(), s.transportValid.load(std::memory_order_relaxed),
                 s.musicalValid.load(std::memory_order_relaxed), s.moving.load(std::memory_order_relaxed),
-                s.transportChanged.load(std::memory_order_relaxed)};
+                s.transportChanged.load(std::memory_order_relaxed),s.draftSteps.load(std::memory_order_relaxed)};
         const auto b=s.sequence.load(std::memory_order_acquire);
         if(a==b && !(b&1)) break;
     }
@@ -137,13 +138,13 @@ Snapshot load(const State& s) noexcept {
         return parameter.address==kLevel?s->kickLevel.load():(s->kickEnabled.load()?1.f:0.f);
     };
     _songCache=beat4::loadSongStore(NSUserDefaults.standardUserDefaults);
-    s->globalMode.store(std::clamp((int)[NSUserDefaults.standardUserDefaults integerForKey:@"beat4.globalMode"],0,2));
+    s->draftSteps.store(16);
     [_songCache enumerateKeysAndObjectsUsingBlock:^(NSString *key,NSDictionary *entry,BOOL *stop){
         (void)stop;const int pc=key.intValue;
         s->tempos[pc].store([entry[@"bpm"] doubleValue]);
         s->notes[pc].store([entry[@"sub"] intValue]);
         s->queues[pc].store([entry[@"queue"] intValue]);
-        s->pcModes[pc].store([entry[@"pcMode"] intValue]);
+        s->cycleSteps[pc].store([entry[@"steps"] intValue]==32?32:16);
     }];
     return self;
 }
@@ -246,9 +247,8 @@ Snapshot load(const State& s) noexcept {
         for(int i=0;i<64;++i){
             s->memories.bpm[i]=s->tempos[i].load();
             s->memories.queue[i]=s->queues[i].load();
-            s->memories.mode[i]=s->pcModes[i].load();
+            s->memories.steps[i]=s->cycleSteps[i].load();
         }
-        s->memories.globalMode=std::clamp(s->globalMode.load(),0,2);
         int previousActive=s->engine.active;
         auto apply=[&](beat4::ProgramAction a){
             if(a.sendPC){
@@ -359,6 +359,8 @@ Snapshot load(const State& s) noexcept {
             s->musicalValid.load()!=musicalOK || s->bpm.load()!=tempo;
         if(visibleChanged)s->revision.fetch_add(1);
         s->sequence.fetch_add(1,std::memory_order_acq_rel);
+        if(s->currentPG.load()!=s->engine.active)
+            s->draftSteps.store(s->engine.active>=0?s->cycleSteps[s->engine.active].load():16);
         s->currentPG.store(s->engine.active);
         s->selectedPC.store(s->engine.selected);
         s->uncertain.store(s->engine.uncertain);
@@ -400,7 +402,7 @@ Snapshot load(const State& s) noexcept {
              @"kickEnabled":@(_state->kickEnabled.load()),@"kickLevel":@(_state->kickLevel.load()),
              @"midiOut":@(_state->midiOutputConfigured.load()),
              @"selectedPC":@(s.selected),@"uncertain":@(s.uncertain),@"estimated":@(s.estimated),
-             @"globalMode":@(_state->globalMode.load()),@"displayBeat":@(projected),
+             @"cycleSteps":@(s.cycleSteps),@"displayBeat":@(projected),
              @"localStop":@(_state->localStop.load()),@"transportStatus":@(_state->transportStatus.load()),
              @"receivedStart":@(_state->receivedStart.load()),@"receivedStop":@(_state->receivedStop.load()),
              @"sentTransport":@(_state->sentTransport.load()),@"lastRealtime":@(_state->lastRealtime.load()),
@@ -430,7 +432,7 @@ Snapshot load(const State& s) noexcept {
     _state->tempos[pg].store(beat4::storedBPM(bpm));
     _state->notes[pg].store(beat4::validSub((int)note)?(int)note:-1);
     _state->queues[pg].store([song[@"queue"] intValue]);
-    _state->pcModes[pg].store(song[@"pcMode"]?[song[@"pcMode"] intValue]:-1);
+    _state->cycleSteps[pg].store([song[@"steps"] intValue]==32?32:16);
 }
 - (void)saveSongTitle:(NSString*)title {
     NSInteger pg=[self currentProgram];if(!beat4::validProgram((int)pg))return;
@@ -455,20 +457,19 @@ Snapshot load(const State& s) noexcept {
 - (void)setKickEnabled:(BOOL)enabled {_state->kickEnabled.store(enabled);_enabledParameter.value=enabled?1:0;}
 - (void)requestTransportToggle { [self refreshHostCallbacks:YES];_state->transportRequest.store(1); }
 - (void)selectProgram:(NSInteger)pc {if(pc>=0 && pc<64)_state->localPC.store((int)pc);}
-- (void)setGlobalMode:(NSInteger)mode {
-    if(mode<0 || mode>2)return;
-    _state->globalMode.store((int)mode);
-    [[NSUserDefaults standardUserDefaults] setInteger:mode forKey:@"beat4.globalMode"];
+- (void)setCycleSteps:(NSInteger)steps {
+    if(steps!=16 && steps!=32)return;
+    _state->draftSteps.store((int)steps);
 }
-- (void)saveCurrentMode {
+- (void)saveCurrentCycle {
     const auto snapshot=load(*_state);
-    NSInteger pc=snapshot.selected>=0?snapshot.selected:snapshot.pg;
-    [self saveMode:_state->globalMode.load() program:pc];
+    [self saveCycleSteps:snapshot.cycleSteps program:snapshot.pg];
 }
-- (void)saveMode:(NSInteger)mode program:(NSInteger)pc {
-    if(pc<0 || pc>=64 || mode < -1 || mode > 2)return;
+- (void)saveCycleSteps:(NSInteger)steps program:(NSInteger)pc {
+    if(pc<0 || pc>=64 || (steps!=16 && steps!=32))return;
     NSMutableDictionary *entry=[[self songForProgram:pc] mutableCopy];
-    entry[@"pcMode"]=@(mode);[self persistSong:entry program:pc];
+    entry[@"steps"]=@(steps);[self persistSong:entry program:pc];
+    if(pc==[self currentProgram])_state->draftSteps.store((int)steps);
 }
 - (NSDictionary*)songForProgram:(NSInteger)pc {
     return _songCache[[NSString stringWithFormat:@"%ld",(long)pc]] ?: @{@"title":@"UNKNOWN",@"bpm":@0,@"sub":@(-1)};

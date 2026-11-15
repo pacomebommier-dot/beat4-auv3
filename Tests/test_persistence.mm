@@ -14,5 +14,14 @@ int main(){@autoreleasepool {
  restored=beat4::loadSongStore(d);assert([restored[@"7"][@"bpm"] intValue]==129 && [restored[@"7"][@"queue"] intValue]==8);
  [d setObject:@{@"0":@{@"bpm":@[],@"queue":@(-1),@"pcMode":@8,@"sub":@99}} forKey:@"beat4.songs.v2"];
  restored=beat4::loadSongStore(d);assert([restored[@"0"][@"bpm"] intValue]==0 && [restored[@"0"][@"pcMode"] intValue]==-1);
+ // Legacy modes/beat queues never opt into 32 steps. Explicit steps persists independently.
+ assert([restored[@"0"][@"steps"] intValue]==16);
+ [d setObject:@{@"0":@{@"title":@"OLD",@"bpm":@128,@"pcMode":@1,@"queue":@32},
+                @"1":@{@"steps":@32,@"bpm":@140},@"2":@{@"steps":@17}} forKey:@"beat4.songs.v2"];
+ restored=beat4::loadSongStore(d);
+ assert([restored[@"0"][@"steps"] intValue]==16 && [restored[@"0"][@"pcMode"] intValue]==1);
+ assert([restored[@"1"][@"steps"] intValue]==32 && [restored[@"2"][@"steps"] intValue]==16);
+ beat4::writeSongStore(d,restored);restored=beat4::loadSongStore(d);
+ assert([restored[@"1"][@"steps"] intValue]==32 && [restored[@"0"][@"bpm"] intValue]==128);
  [d removePersistentDomainForName:name];puts("R10 native persistence/migration PASS");
 }}

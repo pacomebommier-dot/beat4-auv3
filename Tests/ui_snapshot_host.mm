@@ -54,7 +54,7 @@
   assert([[[unit songForProgram:6] objectForKey:@"bpm"] doubleValue]==117);
   assert([[[unit songForProgram:7] objectForKey:@"bpm"] doubleValue]==0);
   [unit saveSongTitle:@"R10 NATIVE TEST"];[unit saveSongBPM:135];[unit saveSongSubNote:5];
-  [unit setGlobalMode:1];[unit saveCurrentMode];
+  [unit setCycleSteps:32];[unit saveCurrentCycle];
   moving=YES;beat=1;tick();[unit selectProgram:39];tick();
   assert([unit.transportSnapshot[@"selectedPC"] intValue]==39 && messages.count==1);
   self.window=[[UIWindow alloc]initWithFrame:CGRectMake(0,0,1024,768)];self.window.rootViewController=vc;
@@ -145,22 +145,29 @@
    NSArray *bytes=message[@"bytes"];
    assert(([bytes[0] intValue]&0xF0)!=0xE0); // no pitch bend on either output
   }
-  // Native AU regression: selection starts tempo during queue and SAVE edits destination.
+  // Native AU regression: selection starts tempo during queue and SAVE edits ACTIVE.
   input=nullptr;moving=NO;tick();[unit selectProgram:10];tick();
   [unit saveSongBPM:148 program:11];
   moving=YES;beat=33;tick();[unit selectProgram:11];tick();
   assert(unit.currentProgram==10 && [unit.transportSnapshot[@"selectedPC"] intValue]==11);
-  [unit setGlobalMode:2];[unit saveCurrentMode];
-  assert([unit songForProgram:11][@"pcMode"] && [[unit songForProgram:11][@"pcMode"] intValue]==2);
-  assert(![unit songForProgram:10][@"pcMode"] || [[unit songForProgram:10][@"pcMode"] intValue]<0);
+  [unit setCycleSteps:32];[unit saveCurrentCycle];
+  assert([[unit songForProgram:10][@"steps"] intValue]==32);
+  assert(![unit songForProgram:11][@"steps"] || [[unit songForProgram:11][@"steps"] intValue]==16);
   const NSUInteger rampBefore=messages.count;beat=35;tick();
   assert(messages.count>rampBefore && unit.currentProgram==10);
   assert([messages.lastObject[@"bytes"] isEqual:(@[@190,@118,@83])]); // 133 BPM during queue
-  beat=40;tick();assert(unit.currentProgram==11); // frozen unknown deadline: finish + one full bar
+  beat=36;tick();assert(unit.currentProgram==11); // queued under active default16 before SAVE
   beat=41;tick();assert([messages.lastObject[@"bytes"] isEqual:(@[@190,@118,@98])]); // 148 BPM
-  [unit selectProgram:12];tick();[unit setGlobalMode:0];[unit saveCurrentMode];
-  assert([[unit songForProgram:12][@"pcMode"] intValue]==0);
-  [unit selectProgram:12];tick();assert(unit.currentProgram==12);
+  [unit selectProgram:12];tick();[unit setCycleSteps:16];[unit saveCurrentCycle];
+  assert([[unit songForProgram:11][@"steps"] intValue]==16);
+  beat=44;tick();assert(unit.currentProgram==12);
+  // Native selector really exposes16/32, never the obsolete0/1/2.
+  [vc updateDisplay:nil];UISegmentedControl *cycles=[vc valueForKey:@"modeControl"];
+  assert(cycles.numberOfSegments==2 && [[cycles titleForSegmentAtIndex:0] isEqual:@"16"] && [[cycles titleForSegmentAtIndex:1] isEqual:@"32"]);
+  assert(cycles.selectedSegmentIndex==0);
+  moving=NO;tick();[unit selectProgram:10];tick();[vc updateDisplay:nil];
+  assert(cycles.selectedSegmentIndex==1); // recall explicit32 when returning to the active project
+
   NSData *trace=[NSJSONSerialization dataWithJSONObject:@{@"host":@"SIMULATED",@"midiOutput":messages,@"journal":unit.diagnosticLog} options:NSJSONWritingPrettyPrinted error:&error];
   assert(trace && !error && [trace writeToFile:[directory stringByAppendingPathComponent:@"mock-host-midi-trace.json"] atomically:YES]);
   // A host may query the block before negotiation and install callbacks after allocation.
