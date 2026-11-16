@@ -47,7 +47,7 @@ struct State {
     std::array<Command,256> commands{};
     std::atomic<unsigned> readCommand{0},writeCommand{0};
     std::atomic<uint64_t> setPublished{0};
-    std::atomic<int> setActive{-1},setQueued{-1};
+    std::atomic<int> setActive{-1},setQueued{-1},setReached{-1};
     beat4::PressRelease xone;
     double gestureClock=0;
     bool enqueue(int kind,int index=0,int value=0) noexcept {
@@ -116,6 +116,7 @@ Snapshot load(const State& s) noexcept {
     AUMIDIOutputEventBlock _cachedMIDIOutput;
     dispatch_source_t _setPersistenceTimer;
     uint64_t _lastPersistedSet;
+    int _lastPersistedReached;
     NSMutableDictionary<NSString*,NSDictionary*> *_songCache; // UI thread only
 }
 - (void)refreshHostCallbacks:(BOOL)replace;
@@ -172,10 +173,13 @@ Snapshot load(const State& s) noexcept {
         for(int i=0;i<8;++i){const int pc=(int)beat4::storedNumber(slots[i],-1);s->set.assign(i,pc);}
         int cursor=(int)beat4::storedNumber(savedSet[@"cursor"],-1);
         s->set.cursor=cursor>=0&&cursor<8?cursor:-1;
-        s->set.on=[savedSet[@"on"] boolValue]&&s->set.first()>=0;
-        s->set.restartTerminal=[savedSet[@"restart"] boolValue];
+        s->set.reachedPosition=(int)beat4::storedNumber(savedSet[@"reachedPosition"],-1);
+        if(s->set.reachedPosition<0||s->set.reachedPosition>=8)s->set.reachedPosition=-1;
+        s->set.on=beat4::storedNumber(savedSet[@"on"])!=0&&s->set.first()>=0;
+        s->set.restartTerminal=beat4::storedNumber(savedSet[@"restart"])!=0;
     }
     s->setPublished.store(s->packedSet());_lastPersistedSet=s->packedSet();
+    s->setReached.store(s->set.reachedPosition);_lastPersistedReached=s->set.reachedPosition;
     __weak Beat4AudioUnit *weakSelf=self;
     _setPersistenceTimer=dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER,0,0,dispatch_get_main_queue());
     dispatch_source_set_timer(_setPersistenceTimer,dispatch_time(DISPATCH_TIME_NOW,250*NSEC_PER_MSEC),250*NSEC_PER_MSEC,10*NSEC_PER_MSEC);
@@ -186,10 +190,11 @@ Snapshot load(const State& s) noexcept {
 - (void)dealloc {if(_setPersistenceTimer)dispatch_source_cancel(_setPersistenceTimer);}
 - (void)persistSetSnapshot {
     const uint64_t bits=_state->setPublished.load();
-    if(bits==_lastPersistedSet)return;
+    const int reached=_state->setReached.load();
+    if(bits==_lastPersistedSet&&reached==_lastPersistedReached)return;
     NSDictionary *snapshot=[self setSnapshot];
     [NSUserDefaults.standardUserDefaults setObject:snapshot forKey:@"beat4.set.v1"];
-    _lastPersistedSet=bits;
+    _lastPersistedSet=bits;_lastPersistedReached=reached;
 }
 // Host installation is independent of editor visibility. Publish only off render.
 - (void)setTransportStateBlock:(AUHostTransportStateBlock)block {
@@ -346,13 +351,15 @@ Snapshot load(const State& s) noexcept {
                 s->transportPulse.receive(e->MIDI.data[0]);
                 continue;
             }
-            // Established BEAT4 control mapping only. Actual XONE mapping must
-            // be verified from PRE capture; do not guess a note/channel.
-            if(e->MIDI.length==3 && e->MIDI.data[0]==0xBF && e->MIDI.data[1]==110){
+            bool xonePressed=false;
+            const bool xoneNote=e->MIDI.length==3 && beat4::xonePlayEvent(e->MIDI.data[0],e->MIDI.data[1],e->MIDI.data[2],xonePressed);
+            // Also accept the established BEAT4 CC control mapping. The XONE
+            // must arrive as raw note12, not Mozaic's old immediate toggle.
+            if(xoneNote || (e->MIDI.length==3 && e->MIDI.data[0]==0xBF && e->MIDI.data[1]==110)){
                 double eventClock=s->gestureClock;
                 if(validTime && e->head.eventSampleTime>=sampleTime)
                     eventClock+=(e->head.eventSampleTime-sampleTime)/sampleRate;
-                const auto gesture=s->xone.event(e->MIDI.data[2]>0,eventClock);
+                const auto gesture=s->xone.event(xoneNote?xonePressed:e->MIDI.data[2]>0,eventClock);
                 if(gesture!=beat4::Gesture::None)playGesture(gesture==beat4::Gesture::Long);
                 continue;
             }
@@ -390,7 +397,7 @@ Snapshot load(const State& s) noexcept {
             s->journal.write(s->engine.uncertain?5:7,s->engine.selected,local>=0?1:0,beat);
         const int request=s->transportRequest.exchange(-1);
         if(request>=0)playGesture(false);
-        s->setActive.store(s->set.activePosition);s->setQueued.store(s->set.queuedPosition);
+        s->setReached.store(s->set.reachedPosition);s->setActive.store(s->set.activePosition);s->setQueued.store(s->set.queuedPosition);
         const auto packed=s->packedSet();
         if(packed!=s->setPublished.exchange(packed))s->revision.fetch_add(1);
         if(midiOut){
@@ -547,7 +554,7 @@ Snapshot load(const State& s) noexcept {
 - (NSDictionary*)setSnapshot {
     const uint64_t bits=_state->setPublished.load();NSMutableArray *slots=[NSMutableArray new];
     for(int i=0;i<8;++i)[slots addObject:@((int)((bits>>(7*i))&127)-1)];
-    return @{@"slots":slots,@"cursor":@((int)((bits>>56)&15)-1),@"on":@((bits>>60)&1),@"restart":@((bits>>61)&1),@"activePosition":@(_state->setActive.load()),@"queuedPosition":@(_state->setQueued.load())};
+    return @{@"slots":slots,@"cursor":@((int)((bits>>56)&15)-1),@"on":@((bits>>60)&1),@"restart":@((bits>>61)&1),@"reachedPosition":@(_state->setReached.load()),@"activePosition":@(_state->setActive.load()),@"queuedPosition":@(_state->setQueued.load())};
 }
 - (void)setEnabled:(BOOL)enabled {_state->enqueue(1,0,enabled);}
 - (void)assignSetPosition:(NSInteger)index program:(NSInteger)pc {

@@ -26,8 +26,13 @@ du même Layout.hpp ; simulation sans MIDI. Aucun SET n'y est intégré.
 Pas d'assimilation HTML/AUv3.
 
 Contraintes réelles : ce Linux ne contient pas Xcode. Le réseau doit être autorisé explicitement ; gh authentifié fonctionne avec cet accès.
-Les octets XONE press/release exacts ne figurent pas dans les sources : seul le
-release velocity0 est établi par contrat. Ne pas inventer un numéro de note.
+Les octets XONE ne figurent pas dans le dépôt initial. La recherche Drive a retrouvé
+MODE_EMPLOI_XONE_SAFE_V1.txt (1r5irgGF5tocB9uL43CZBpKVnGaWhuqy8) et
+XONE_COMPLET_V3.txt (1S8W714b_zIK_EJrwPVgFt-lI2MZgCrdM) : canal15 note12,
+NoteOn velocity0 ou NoteOff au release. Le script V3 consomme la note et
+émet immédiatement CC110/111 : il faut le remplacer pour le SET, faute de quoi
+BEAT4 ne reçoit pas la durée. Le nouveau script d'intégration conserve LED/mute
+et délègue les gestes à BEAT4 via une liaison matérielle directe distincte.
 La demande externe queued et la confirmation matérielle Circuit doivent rester
 distinctes : quantifier une confirmation déjà exécutée sur Circuit désynchroniserait
 l'affichage et le matériel.

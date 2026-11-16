@@ -239,6 +239,27 @@
    if([messages[i][@"bytes"] isEqual:stopPress])foundStop=YES;
   assert(foundStop && !moving);
 
+  // Real XONE byte shape from the archived integration, not a CC assumption.
+  moving=YES;tick();[unit requestPlayGestureLong:NO];tick();
+  event.MIDI.length=3;event.MIDI.data[0]=0x9E;event.MIDI.data[1]=12;event.MIDI.data[2]=127;input=&event;
+  setBefore=messages.count;tick();input=nullptr;
+  assert(messages.count==setBefore); // no NEXT at press
+  for(int i=0;i<210;++i)tick();
+  event.MIDI.data[2]=0;input=&event;tick();input=nullptr;tick();
+  assert([unit.transportSnapshot[@"selectedPC"] intValue]==-1);
+  assert([messages[messages.count-2][@"bytes"] isEqual:stopPress]);
+  moving=NO;tick();event.MIDI.data[2]=127;input=&event;setBefore=messages.count;tick();
+  assert(messages.count==setBefore);
+  event.MIDI.data[0]=0x8E;event.MIDI.data[2]=0;tick();input=nullptr;tick();
+  assert([messages[messages.count-2][@"bytes"] isEqual:playPress]);
+  // Autosave payload restores configuration and cursor, never queue or transport.
+  [unit performSelector:@selector(persistSetSnapshot)];
+  Beat4AudioUnit *restored=[[Beat4AudioUnit alloc]initWithComponentDescription:desc options:0 error:&error];
+  assert([restored.setSnapshot[@"slots"] isEqual:unit.setSnapshot[@"slots"]]);
+  assert([restored.setSnapshot[@"cursor"] isEqual:unit.setSnapshot[@"cursor"]]);
+  assert([restored.setSnapshot[@"on"] boolValue]);
+  assert([restored.transportSnapshot[@"selectedPC"] intValue]==-1 && ![restored.transportSnapshot[@"moving"] boolValue]);
+
   NSData *trace=[NSJSONSerialization dataWithJSONObject:@{@"host":@"SIMULATED",@"midiOutput":messages,@"journal":unit.diagnosticLog} options:NSJSONWritingPrettyPrinted error:&error];
   assert(trace && !error && [trace writeToFile:[directory stringByAppendingPathComponent:@"mock-host-midi-trace.json"] atomically:YES]);
   // A host may query the block before negotiation and install callbacks after allocation.

@@ -26,6 +26,11 @@ int main(){
  s.enable(false,h);assert(s.program.selected==7); // OFF preserves queue
  s.advance({true,true,20,20,4,128},m);assert(s.program.active==7);
  for(int i=0;i<8;++i){s.assign(i,-1);}assert(!s.on);
+ // External recall does not erase the reached terminal for RESET.
+ SetEngine resetAfterExternal;resetAfterExternal.assign(0,3);resetAfterExternal.assign(6,7);resetAfterExternal.on=true;
+ resetAfterExternal.pad(6,{true,false,0,0,4,128},m);
+ resetAfterExternal.request(9,RequestOrigin::External,-1,{true,false,0,0,4,128},m);
+ resetAfterExternal.reset();resetAfterExternal.play(h,m);assert(resetAfterExternal.queuedPosition==0);
  // Page selection retains historical cancellation when selecting ACTIVE.
  SetEngine page;page.program.active=3;page.request(6,RequestOrigin::Page,-1,h,m);
  page.request(3,RequestOrigin::Page,-1,h,m);assert(page.program.selected==-1);
@@ -38,6 +43,12 @@ int main(){
  // STOPPED repeated recall must still apply stored tempo.
  ProgramEngine p;p.request(3,true,false,{true,false,0,0,4,128},m);
  assert(p.request(3,true,false,{true,false,0,0,4,128},m).tempo==117);
+ bool pressed=false;
+ assert(xonePlayEvent(0x9E,12,127,pressed)&&pressed);
+ assert(xonePlayEvent(0x9E,12,0,pressed)&&!pressed);
+ assert(xonePlayEvent(0x8E,12,64,pressed)&&!pressed);
+ assert(!xonePlayEvent(0x9D,12,127,pressed));
+ assert(!xonePlayEvent(0xBE,12,127,pressed));
  PressRelease gesture;
  assert(gesture.event(true,0)==Gesture::None);
  assert(gesture.event(false,.2)==Gesture::Short);

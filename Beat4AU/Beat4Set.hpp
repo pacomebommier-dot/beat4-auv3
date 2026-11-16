@@ -1,6 +1,12 @@
 #pragma once
 #include "Beat4Program.hpp"
 namespace beat4 {
+// XONE K2 documented integration: physical channel15 (index14), note12.
+// NoteOff and NoteOn velocity0 both terminate the held gesture.
+inline bool xonePlayEvent(uint8_t status,uint8_t note,uint8_t velocity,bool& pressed) noexcept {
+ if(note!=12 || (status!=0x9E&&status!=0x8E))return false;
+ pressed=status==0x9E&&velocity>0;return true;
+}
 enum class RequestOrigin { None, Set, Page, External };
 enum class Gesture { None, Short, Long };
 // Technical default matches UIKit's existing long-press recognizer (0.5s).
@@ -19,9 +25,9 @@ struct SetEngine {
  ProgramEngine program;
  std::array<int,8> slots{{-1,-1,-1,-1,-1,-1,-1,-1}};
  bool on=false,restartTerminal=false;
- int cursor=-1,activePosition=-1,queuedPosition=-1;
+ int cursor=-1,activePosition=-1,queuedPosition=-1,reachedPosition=-1;
  RequestOrigin origin=RequestOrigin::None;
- int beforeCursor=-1,beforeActive=-1,beforeQueued=-1;
+ int beforeCursor=-1,beforeActive=-1,beforeQueued=-1,beforeReached=-1;
  RequestOrigin beforeOrigin=RequestOrigin::None;
  int first() const noexcept {for(int i=0;i<8;++i)if(slots[i]>=0)return i;return -1;}
  int last() const noexcept {for(int i=7;i>=0;--i)if(slots[i]>=0)return i;return -1;}
@@ -31,7 +37,7 @@ struct SetEngine {
  }
  void enable(bool value,const HostPosition& h) noexcept {
   if(value&&!on&&cursor<0&&h.moving)
-   for(int i=0;i<8;++i)if(slots[i]>=0&&slots[i]==program.active){cursor=i;activePosition=i;break;}
+   for(int i=0;i<8;++i)if(slots[i]>=0&&slots[i]==program.active){cursor=i;activePosition=i;reachedPosition=i;break;}
   on=value&&first()>=0;
  }
  ProgramAction request(int pc,RequestOrigin source,int index,const HostPosition& h,const ProgramMemory& m) noexcept {
@@ -56,9 +62,9 @@ struct SetEngine {
  }
  void executed(ProgramAction a) noexcept {
   if(a.activated<0)return;
-  beforeCursor=cursor;beforeActive=activePosition;beforeQueued=queuedPosition;beforeOrigin=origin;
+  beforeCursor=cursor;beforeActive=activePosition;beforeQueued=queuedPosition;beforeOrigin=origin;beforeReached=reachedPosition;
   activePosition=origin==RequestOrigin::Set?queuedPosition:-1;
-  if(activePosition>=0)cursor=activePosition;
+  if(activePosition>=0){cursor=activePosition;reachedPosition=activePosition;}
   queuedPosition=-1;origin=RequestOrigin::None;
  }
  ProgramAction advance(const HostPosition& h,const ProgramMemory& m) noexcept {
@@ -73,10 +79,10 @@ struct SetEngine {
   auto a=program.request(pc,false,false,h,m);executed(a);return a;
  }
  void outputFailed(int previous,int requested) noexcept {
-  cursor=beforeCursor;activePosition=beforeActive;queuedPosition=beforeQueued;origin=beforeOrigin;
+  reachedPosition=beforeReached;cursor=beforeCursor;activePosition=beforeActive;queuedPosition=beforeQueued;origin=beforeOrigin;
   program.outputFailed(previous,requested);
  }
  void stop() noexcept {program.cancel();queuedPosition=-1;origin=RequestOrigin::None;}
- void reset() noexcept {restartTerminal=cursor>=0&&cursor==last()&&activePosition==cursor;}
+ void reset() noexcept {restartTerminal=cursor>=0&&cursor==last()&&reachedPosition==cursor;}
 };
 }
