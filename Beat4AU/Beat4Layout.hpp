@@ -81,7 +81,7 @@ inline Layout layoutFor(double W,double H) noexcept {
  l.pcMode.y=l.save.y;l.pcMode.h=l.save.h;
  // FIX-03/04: the existing title row is shared, never the tempo-mode row.
  l.viewTitle=l.host;l.viewTitle.w=l.host.w*.42;
- l.setStrip={l.host.x+l.host.w*.44,l.host.y+(l.host.h-l.hostSize)/2,l.host.w*.56,l.hostSize};
+ l.setStrip={l.host.x+l.host.w*.44,l.host.y+(l.host.h-l.hostSize*.65)/2,l.host.w*.56,l.hostSize*.65};
  const double controls=std::min(150.,W*.22);
  l.setToggle={l.song.x+l.song.w-controls,l.song.y+(l.song.h-28)/2,controls*.78,28};
  l.setEditor={l.setToggle.x+l.setToggle.w,l.setToggle.y,controls*.22,28};

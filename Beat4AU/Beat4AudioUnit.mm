@@ -366,7 +366,10 @@ Snapshot load(const State& s) noexcept {
             int raw=-1;
             if(beat4::isCircuitProgramChange(e->MIDI.data[0],e->MIDI.data[1],raw)){
                 s->journal.write(1,raw,0,beat);
-                if(raw>=64)apply(s->set.request(raw%64,beat4::RequestOrigin::External,-1,position,s->memories));
+                // In1 retains Circuit's existing confirmation protocol. In2 is
+                // for independent controllers requesting a quantized recall.
+                if(e->MIDI.cable==1)apply(s->set.request(raw%64,beat4::RequestOrigin::External,-1,position,s->memories));
+                else if(raw>=64)apply(s->set.request(raw%64,beat4::RequestOrigin::CircuitQueued,-1,position,s->memories));
                 else apply(s->set.confirm(raw,position,s->memories));
             }
         }

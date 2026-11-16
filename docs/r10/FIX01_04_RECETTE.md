@@ -20,6 +20,8 @@ et le nouveau gestionnaire BEAT4 : cela provoquerait des START/STOP parasites.
    des retours d'état, pas des appuis. Aucun loopback K2/LED.
 4. BEAT4 AUM Control → MIDI Control : CC110/111 canal16 Start/Stop historiques ;
    CC118 canal15 tempo, plage50–177 comme en 0.5.13. BEAT4 Circuit Projects → Circuit.
+   PC de contrôleurs indépendants → BEAT4 In2 (demandes quantifiées). Circuit
+   → BEAT4 In1 conserve le protocole historique confirmations0–63 / queued64–127.
    Conserver AUM MIDI Clock/SPP et protections audio Circuit existantes.
 5. Si la session utilise les trois scripts SAFE V1 plutôt que XONE COMPLET V3,
    désactiver seulement son ancien THRU transport immédiat ; garder LED et SAFE,
@@ -52,7 +54,7 @@ qui restent la preuve des routes physiques. Ne jamais connecter leurs sorties.
 | États | Curseur contour/ton gris, actif texte lumineux, QUEUED contour ambre ; seul l'actif musical change à la frontière. Effacer un pad actif supprime sa lumière sans arrêter le SONG. |
 | Queue | Plusieurs PLAY avant frontière : seul dernier demandé exécuté. NEXT n'envoie aucun START. STEP16/32 du projet actif détermine la frontière. |
 | Pad vs PC | Pad SET déplace immédiatement curseur ; pagePC et PC externe ne le déplacent pas. PC externe queued remplace le QUEUE SET ; PLAY repart du curseur mémorisé. |
-| Circuit PC | Distinguer0–63 confirmation matérielle et64–127 demande queued ; une confirmation correspond à un changement déjà réalisé sur Circuit. Vérifier les deux par sondes. |
+| Circuit PC | Distinguer0–63 confirmation matérielle et64–127 demande queued ; une confirmation correspond à un changement déjà réalisé sur Circuit. Vérifier les deux par sondes. In2 : unPC0–63 de contrôleur indépendant doit rester queued pendantRUNNING et émettre sonPC uniquement à frontière. |
 | ON/OFF | Bascule seule silencieuse. OFF pendantQUEUE le conserve. Réactiver conserve curseur. Vider les8 positions forceOFF sans supprimer le QUEUE existant. |
 | STOP/reprise | Long PLAY en ON annuleQUEUE ; aucun PC annulé au START suivant. Curseur conservé ; PLAY aprèsSTOP poursuit. Tester STOP avant, au buffer de frontière, après. |
 | RESET | LongSET ouvre confirmation. Annuler ne change rien ; confirmer garde8affectations/QUEUE. Au terminal atteint, prochainPLAY= premier ; intermédiaire= suivant. QUEUE exactement à frontière exécuté avantRESET. |

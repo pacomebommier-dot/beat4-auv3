@@ -104,7 +104,7 @@
   assert([unit.transportSnapshot[@"moving"] isEqual:before[@"moving"]]);
   NSArray<UIButton*> *mini=[vc valueForKey:@"setPads"];assert(mini.count==8);
   for(UIButton *pad in mini){
-   assert(!pad.hidden && pad.frame.size.height<=viewTitle.font.lineHeight);
+   assert(!pad.hidden && pad.frame.size.height<=viewTitle.font.capHeight);
    assert(CGRectGetMinX(pad.frame)>=CGRectGetMaxX(viewTitle.frame));
   }
   AURenderEvent event{};event.head.eventType=AURenderEventMIDI;event.head.eventSampleTime=AUEventSampleTimeImmediate;
@@ -198,6 +198,11 @@
   assert([messages[setBefore][@"bytes"] isEqual:(@[@207,@0])]);
   assert([messages[setBefore+1][@"bytes"] isEqual:(@[@190,@118,@0])]);
   assert([messages[setBefore+2][@"bytes"] isEqual:playPress]);
+  vc.view.frame=CGRectMake(0,0,1024,768);[vc.view setNeedsLayout];[vc.view layoutIfNeeded];[vc updateDisplay:nil];
+  UIGraphicsImageRenderer *setRenderer=[[UIGraphicsImageRenderer alloc]initWithSize:vc.view.bounds.size];
+  UIImage *setImage=[setRenderer imageWithActions:^(UIGraphicsImageRendererContext *context){[vc.view.layer renderInContext:context.CGContext];}];
+  assert([UIImagePNGRepresentation(setImage) writeToFile:[directory stringByAppendingPathComponent:@"SET_ON_1024x768.png"] atomically:YES]);
+  for(UIButton *pad in mini)assert(!pad.hidden);
   moving=YES;beat=1;tick();
   setBefore=messages.count;
   [unit requestPlayGestureLong:NO];tick();
@@ -215,14 +220,23 @@
   [unit requestPlayGestureLong:NO];tick();[unit requestPlayGestureLong:YES];tick();tick();
   assert([unit.transportSnapshot[@"selectedPC"] intValue]==-1);
   beat=8;tick();assert(unit.currentProgram==1);
+  // Independent external-request cable must use the same quantized queue.
+  [unit selectSetPosition:3];tick();
+  event.MIDI.length=2;event.MIDI.cable=1;event.MIDI.data[0]=0xCF;event.MIDI.data[1]=2;input=&event;
+  setBefore=messages.count;tick();input=nullptr;event.MIDI.cable=0;
+  assert(unit.currentProgram==1 && [unit.transportSnapshot[@"selectedPC"] intValue]==2);
+  assert([unit.setSnapshot[@"cursor"] intValue]==3);
+  assert(messages.count==setBefore);
+  beat=12;tick();assert(unit.currentProgram==2);
+  assert([messages[setBefore][@"bytes"] isEqual:(@[@207,@2])]);
   // RESET exactly at terminal boundary: queue first then reset -> first on PLAY.
-  [unit selectSetPosition:6];tick();beat=12;[unit resetSetCache];tick();
+  [unit selectSetPosition:6];tick();beat=16;[unit resetSetCache];tick();
   assert(unit.currentProgram==2 && [unit.setSnapshot[@"cursor"] intValue]==6);
   [unit requestPlayGestureLong:NO];tick();assert([unit.transportSnapshot[@"selectedPC"] intValue]==0);
   [unit setEnabled:NO];tick();assert([unit.transportSnapshot[@"selectedPC"] intValue]==0);
   for(int i=0;i<8;++i)[unit assignSetPosition:i program:-1];tick();
   assert(![unit.setSnapshot[@"on"] boolValue] && [unit.transportSnapshot[@"selectedPC"] intValue]==0);
-  beat=16;tick();assert(unit.currentProgram==0);
+  beat=20;tick();assert(unit.currentProgram==0);
 
   // Review regressions: failed tempo output must not START at the old tempo.
   moving=NO;tick();[unit assignSetPosition:0 program:1];[unit setEnabled:YES];tick();

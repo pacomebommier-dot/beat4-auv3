@@ -7,7 +7,7 @@ inline bool xonePlayEvent(uint8_t status,uint8_t note,uint8_t velocity,bool& pre
  if(note!=12 || (status!=0x9E&&status!=0x8E))return false;
  pressed=status==0x9E&&velocity>0;return true;
 }
-enum class RequestOrigin { None, Set, Page, External };
+enum class RequestOrigin { None, Set, Page, External, CircuitQueued };
 enum class Gesture { None, Short, Long };
 // Technical default matches UIKit's existing long-press recognizer (0.5s).
 struct PressRelease {
@@ -43,7 +43,7 @@ struct SetEngine {
  ProgramAction request(int pc,RequestOrigin source,int index,const HostPosition& h,const ProgramMemory& m) noexcept {
   if(pc<0||pc>=64)return {};
   origin=source;queuedPosition=source==RequestOrigin::Set?index:-1;
-  auto a=program.request(pc,source!=RequestOrigin::External,source==RequestOrigin::External,h,m,source==RequestOrigin::Set);
+  auto a=program.request(pc,source!=RequestOrigin::CircuitQueued,source==RequestOrigin::CircuitQueued,h,m,source==RequestOrigin::Set);
   executed(a);return a;
  }
  ProgramAction pad(int index,const HostPosition& h,const ProgramMemory& m) noexcept {

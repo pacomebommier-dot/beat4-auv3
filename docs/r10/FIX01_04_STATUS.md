@@ -24,7 +24,8 @@ Plan : docs/superpowers/plans/2026-11-16-fix01-04.md.
 Limites connues : les modes0/1/2 ne gouvernent déjà plus les rampes dans la base
 0.5.13 ; ils n'ont pas été réintroduits sans contrat de migration. PC0–63
 Circuit restent des confirmations matérielles immédiates, distinctes des
-requêtes64–127 quantifiées. Le SET réutilise strictement l'uniqueQUEUE moteur.
+requêtes64–127 quantifiées surIn1. Les contrôleurs indépendants utilisentIn2 :
+leursPC sont des demandes de rappel quantifiées, sans déplacement du curseur. Le SET réutilise strictement l'uniqueQUEUE moteur.
 CollisionSTOP/frontière : événements/commandes observés dansbuffer traités avant
 advance ; RESET confirmé aprèsadvance. Aucune promesse sample-exact intrabuffer.
 Recette matérielle : FIX01_04_RECETTE.md, statutÀEXÉCUTER.
