@@ -71,6 +71,21 @@
     vc.view.frame=CGRectMake(0,0,size.width,size.height);
     [vc.view setNeedsLayout];[vc.view layoutIfNeeded];
     [vc updateDisplay:nil];
+    UISlider *slider=[vc valueForKey:@"levelSlider"];
+    CGFloat trackCenter=CGRectGetMidY(slider.frame);
+    auto capCenter=[](UIView *v,UIFont *font){
+      return CGRectGetMidY(v.frame)+(font.ascender+font.descender-font.capHeight)/2;
+    };
+    UIButton *kick=[vc valueForKey:@"kickButton"],*note=[vc valueForKey:@"noteButton"];
+    UILabel *sub=[vc valueForKey:@"subLabel"],*level=[vc valueForKey:@"levelLabel"];
+    CGFloat textCenter=capCenter(kick,kick.titleLabel.font);
+    assert(std::abs(capCenter(sub,sub.font)-textCenter)<.01);
+    assert(std::abs(capCenter(note,note.titleLabel.font)-textCenter)<.01);
+    assert(std::abs(capCenter(level,level.font)-trackCenter)<.01);
+    if(size.width>size.height)assert(std::abs(textCenter-trackCenter)<.01);
+    UILabel *title=[vc valueForKey:@"host"];
+    CGPoint target=CGPointMake(CGRectGetMidX(title.bounds),-8);
+    assert([vc.view hitTest:[title convertPoint:target toView:vc.view] withEvent:nil]==title);
     NSArray<UIButton*> *pads=[vc valueForKey:@"pads"];assert(pads.count==32);
     UILabel *header=[vc valueForKey:@"pgLabel"];
     assert([header.text containsString:@"ACTIVE PC 08"] && [header.text containsString:@"SELECTED 40"]);
@@ -96,7 +111,11 @@
   UILabel *viewTitle=[vc valueForKey:@"host"];
   for(int i=0;i<3;++i){
    UITapGestureRecognizer *tap=(UITapGestureRecognizer*)viewTitle.gestureRecognizers.firstObject;
+   assert([viewTitle pointInside:CGPointMake(CGRectGetWidth(viewTitle.bounds)/2,-8) withEvent:nil]);
    [vc performSelector:@selector(nextView:) withObject:tap];
+   assert([viewTitle.text isEqualToString:(i==0?@"PC 01–32":i==1?@"PC 33–64":@"MÉTRONOME")]);
+   assert([[vc valueForKey:@"canvas"] valueForKey:@"showBars"] &&
+          [[[vc valueForKey:@"canvas"] valueForKey:@"showBars"] boolValue]==(i==2));
   }
   assert([[vc valueForKey:@"page"] intValue]==0);
   assert([unit.transportSnapshot[@"pg"] isEqual:before[@"pg"]]);
@@ -104,7 +123,7 @@
   assert([unit.transportSnapshot[@"moving"] isEqual:before[@"moving"]]);
   NSArray<UIButton*> *mini=[vc valueForKey:@"setPads"];assert(mini.count==8);
   for(UIButton *pad in mini){
-   assert(!pad.hidden && pad.frame.size.height<=viewTitle.font.capHeight);
+   assert(!pad.hidden && pad.frame.size.height>=viewTitle.font.capHeight);
    assert(CGRectGetMinX(pad.frame)>=CGRectGetMaxX(viewTitle.frame));
   }
   AURenderEvent event{};event.head.eventType=AURenderEventMIDI;event.head.eventSampleTime=AUEventSampleTimeImmediate;
