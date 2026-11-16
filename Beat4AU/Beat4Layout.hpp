@@ -14,6 +14,7 @@ inline Rect programPad(Rect a,int i) noexcept {
 }
 struct Layout {
  Rect logo,version,status,host,pg,bars,kick,subLabel,subValue,levelLabel,levelSlider;
+ Rect viewTitle,setStrip,setToggle,setEditor;
  Rect song,bpm,play,pause,stop,queue,modeLabel,modeControl,save,pcMode,toggle;
  bool transportsInHeader=false,portrait=false;
  double scale=1,barWidth=0,barGap=0,corner=0,logoSize=0,versionSize=0,hostSize=0;
@@ -74,9 +75,24 @@ inline Layout layoutFor(double W,double H) noexcept {
   l.save=text(m+(compact?248:336)*sx,(compact?362:1127)*sy,(compact?50:110)*sx,(compact?12:24)*s);
   l.pcMode=text(m+(compact?305:463)*sx,(compact?362:1127)*sy,W-m-(m+(compact?305:463)*sx),(compact?11:20)*s);
  }
+ // FIX-01: modest increase and vertical centering within the song line.
+ if(!l.portrait)l.toggle.y=l.song.y+(l.song.h-l.toggle.h)/2;
+ // FIX-02: equal typographic center/height, keeping original horizontal positions.
+ l.pcMode.y=l.save.y;l.pcMode.h=l.save.h;
+ // FIX-03/04: the existing title row is shared, never the tempo-mode row.
+ l.viewTitle=l.host;l.viewTitle.w=l.host.w*.42;
+ l.setStrip={l.host.x+l.host.w*.44,l.host.y+(l.host.h-l.hostSize)/2,l.host.w*.56,l.hostSize};
+ const double controls=std::min(150.,W*.22);
+ l.setToggle={l.song.x+l.song.w-controls,l.song.y+(l.song.h-28)/2,controls*.78,28};
+ l.setEditor={l.setToggle.x+l.setToggle.w,l.setToggle.y,controls*.22,28};
+ l.song.w-=controls+8;
  l.pg=l.status;
  l.queue={m,l.bars.y+l.bars.h+2,W-2*m,std::max(12.,12*s)};
  l.play=l.pause=l.stop=l.toggle;
  return l;
+}
+inline Rect setPad(const Layout& l,int index) noexcept {
+ const double pitch=l.setStrip.w/8,gap=std::min(4.,pitch*.12);
+ return {l.setStrip.x+index*pitch,l.setStrip.y,pitch-gap,l.setStrip.h};
 }
 }

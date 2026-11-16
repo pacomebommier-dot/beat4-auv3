@@ -88,6 +88,23 @@
     assert([UIImagePNGRepresentation(image) writeToFile:file atomically:YES]);
    }
   }
+  // FIX-03/04: title cycle is visual only; eight fixed mini-pads on title row.
+  [vc setValue:@0 forKey:@"page"];[vc updateDisplay:nil];
+  NSDictionary *before=unit.transportSnapshot;
+  UILabel *viewTitle=[vc valueForKey:@"host"];
+  for(int i=0;i<3;++i){
+   UITapGestureRecognizer *tap=(UITapGestureRecognizer*)viewTitle.gestureRecognizers.firstObject;
+   [vc performSelector:@selector(nextView:) withObject:tap];
+  }
+  assert([[vc valueForKey:@"page"] intValue]==0);
+  assert([unit.transportSnapshot[@"pg"] isEqual:before[@"pg"]]);
+  assert([unit.transportSnapshot[@"selectedPC"] isEqual:before[@"selectedPC"]]);
+  assert([unit.transportSnapshot[@"moving"] isEqual:before[@"moving"]]);
+  NSArray<UIButton*> *mini=[vc valueForKey:@"setPads"];assert(mini.count==8);
+  for(UIButton *pad in mini){
+   assert(!pad.hidden && pad.frame.size.height<=viewTitle.font.lineHeight);
+   assert(CGRectGetMinX(pad.frame)>=CGRectGetMaxX(viewTitle.frame));
+  }
   AURenderEvent event{};event.head.eventType=AURenderEventMIDI;event.head.eventSampleTime=AUEventSampleTimeImmediate;
   event.MIDI.length=2;event.MIDI.data[0]=0xCF;event.MIDI.data[1]=103;input=&event;tick();
   assert(unit.currentProgram==7 && ![unit.transportSnapshot[@"uncertain"] boolValue] && messages.count==1);
@@ -167,6 +184,43 @@
   assert(cycles.selectedSegmentIndex==0);
   moving=NO;tick();[unit selectProgram:10];tick();[vc updateDisplay:nil];
   assert(cycles.selectedSegmentIndex==1); // recall explicit32 when returning to the active project
+
+  // SET AU path: stopped PC/BPM before START, repeated NEXT, replacement and STOP.
+  moving=NO;beat=0;tick();
+  [unit assignSetPosition:1 program:0];[unit assignSetPosition:3 program:1];
+  [unit assignSetPosition:5 program:0];[unit assignSetPosition:6 program:2];
+  [unit setEnabled:YES];tick();
+  NSUInteger setBefore=messages.count;
+  [unit requestPlayGestureLong:NO];tick();tick();
+  assert(unit.currentProgram==0 && [unit.setSnapshot[@"cursor"] intValue]==1);
+  assert([messages[setBefore][@"bytes"] isEqual:(@[@207,@0])]);
+  assert([messages[setBefore+1][@"bytes"] isEqual:(@[@190,@118,@0])]);
+  assert([messages[setBefore+2][@"bytes"] isEqual:playPress]);
+  moving=YES;beat=1;tick();
+  setBefore=messages.count;
+  [unit requestPlayGestureLong:NO];tick();
+  [unit requestPlayGestureLong:NO];tick();
+  assert([unit.transportSnapshot[@"selectedPC"] intValue]==0);
+  assert([unit.setSnapshot[@"cursor"] intValue]==1);
+  for(NSUInteger i=setBefore;i<messages.count;++i)
+   assert(![messages[i][@"bytes"] isEqual:playPress]);
+  // External queued PC replaces pending SET and does not move cursor.
+  event.MIDI.length=2;event.MIDI.data[0]=0xCF;event.MIDI.data[1]=66;input=&event;tick();input=nullptr;
+  assert([unit.transportSnapshot[@"selectedPC"] intValue]==2 && [unit.setSnapshot[@"cursor"] intValue]==1);
+  [unit requestPlayGestureLong:NO];tick();assert([unit.transportSnapshot[@"selectedPC"] intValue]==1);
+  beat=3.99;tick();assert(unit.currentProgram==0);
+  beat=4;tick();assert(unit.currentProgram==1 && [unit.setSnapshot[@"cursor"] intValue]==3);
+  [unit requestPlayGestureLong:NO];tick();[unit requestPlayGestureLong:YES];tick();tick();
+  assert([unit.transportSnapshot[@"selectedPC"] intValue]==-1);
+  beat=8;tick();assert(unit.currentProgram==1);
+  // RESET exactly at terminal boundary: queue first then reset -> first on PLAY.
+  [unit selectSetPosition:6];tick();beat=12;[unit resetSetCache];tick();
+  assert(unit.currentProgram==2 && [unit.setSnapshot[@"cursor"] intValue]==6);
+  [unit requestPlayGestureLong:NO];tick();assert([unit.transportSnapshot[@"selectedPC"] intValue]==0);
+  [unit setEnabled:NO];tick();assert([unit.transportSnapshot[@"selectedPC"] intValue]==0);
+  for(int i=0;i<8;++i)[unit assignSetPosition:i program:-1];tick();
+  assert(![unit.setSnapshot[@"on"] boolValue] && [unit.transportSnapshot[@"selectedPC"] intValue]==0);
+  beat=16;tick();assert(unit.currentProgram==0);
 
   NSData *trace=[NSJSONSerialization dataWithJSONObject:@{@"host":@"SIMULATED",@"midiOutput":messages,@"journal":unit.diagnosticLog} options:NSJSONWritingPrettyPrinted error:&error];
   assert(trace && !error && [trace writeToFile:[directory stringByAppendingPathComponent:@"mock-host-midi-trace.json"] atomically:YES]);
