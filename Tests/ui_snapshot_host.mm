@@ -232,7 +232,7 @@
   // RESET exactly at terminal boundary: queue first then reset -> first on PLAY.
   [unit selectSetPosition:6];tick();beat=16;[unit resetSetCache];tick();
   assert(unit.currentProgram==2 && [unit.setSnapshot[@"cursor"] intValue]==6);
-  [unit requestPlayGestureLong:NO];tick();assert([unit.transportSnapshot[@"selectedPC"] intValue]==0);
+  [unit resetSetCache];[unit requestPlayGestureLong:NO];tick();assert([unit.transportSnapshot[@"selectedPC"] intValue]==0);
   [unit setEnabled:NO];tick();assert([unit.transportSnapshot[@"selectedPC"] intValue]==0);
   for(int i=0;i<8;++i)[unit assignSetPosition:i program:-1];tick();
   assert(![unit.setSnapshot[@"on"] boolValue] && [unit.transportSnapshot[@"selectedPC"] intValue]==0);

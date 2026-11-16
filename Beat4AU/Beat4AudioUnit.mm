@@ -377,9 +377,8 @@ Snapshot load(const State& s) noexcept {
         const int local=s->localPC.exchange(-1);
         if(local>=0)s->journal.write(2,local,1,beat);
         if(local>=0)apply(s->set.request(local,beat4::RequestOrigin::Page,-1,position,s->memories));
-        // Commands preceding the boundary are applied first; RESET is deferred
-        // until after advance, so an exact RESET/QUEUE tie executes QUEUE first.
-        bool reset=false;
+        // Preserve FIFO order, including RESET followed by PLAY in one buffer.
+        // RESET alone first executes any queue due exactly at this boundary.
         unsigned r=s->readCommand.load();
         const unsigned w=s->writeCommand.load(std::memory_order_acquire);
         while(r!=w){
@@ -388,12 +387,11 @@ Snapshot load(const State& s) noexcept {
             else if(command.kind==2)s->set.assign(command.index,command.value);
             else if(command.kind==3)apply(s->set.pad(command.index,position,s->memories));
             else if(command.kind==4)playGesture(command.value!=0);
-            else if(command.kind==5)reset=true;
+            else if(command.kind==5){apply(s->set.advance(position,s->memories));s->set.reset();}
             r=(r+1)%s->commands.size();
         }
         s->readCommand.store(r,std::memory_order_release);
         apply(s->set.advance(position,s->memories));
-        if(reset)s->set.reset();
         s->gestureClock+=sampleRate>0?frameCount/sampleRate:0;
 
         if(s->engine.selected!=s->selectedPC.load() || s->engine.uncertain!=s->uncertain.load())
