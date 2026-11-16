@@ -29,6 +29,13 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
 @end
 // Mini-pad width is also its exclusive horizontal hit zone. Only expand
 // vertically: neighboring mini-pads and title must never steal each other's taps.
+@interface Beat4TitleLabel : UILabel @end
+@implementation Beat4TitleLabel
+- (BOOL)pointInside:(CGPoint)point withEvent:(UIEvent*)event {
+    (void)event;
+    return CGRectContainsPoint(CGRectInset(self.bounds,0,-MAX(0,(44-self.bounds.size.height)/2)),point);
+}
+@end
 @interface Beat4MiniButton : UIButton @end
 @implementation Beat4MiniButton
 - (BOOL)pointInside:(CGPoint)point withEvent:(UIEvent*)event {
@@ -139,10 +146,12 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     _logo.accessibilityLabel=@"BEAT//4, diagnostic MIDI";
     _logo.accessibilityTraits=UIAccessibilityTraitButton;
     [_logo addGestureRecognizer:[[UITapGestureRecognizer alloc]initWithTarget:self action:@selector(showMIDIDiagnostic:)]];
-    _versionLabel=[self makeLabel:[NSString stringWithFormat:@"v%@",[NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"0.5.14"] size:8 color:RGB(122,145,121)];
+    _versionLabel=[self makeLabel:[NSString stringWithFormat:@"v%@",[NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"0.5.15"] size:8 color:RGB(122,145,121)];
     _modeLabel=[self makeLabel:@"TEMPO MODE" size:10 color:RGB(197,208,197)];
     _pcModeLabel=[self makeLabel:@"" size:10 color:RGB(132,157,136)];
-    _host=[self makeLabel:@"AUM  •  WAIT" size:11 color:RGB(144,161,140)];_host.textAlignment=NSTextAlignmentLeft;
+    _host=[[Beat4TitleLabel alloc]init];_host.text=@"MÉTRONOME";
+    _host.font=Mono(11);_host.textColor=RGB(144,161,140);[self.view addSubview:_host];
+    _host.textAlignment=NSTextAlignmentLeft;
     _host.userInteractionEnabled=YES;_host.accessibilityTraits=UIAccessibilityTraitButton;
     [_host addGestureRecognizer:[[UITapGestureRecognizer alloc]initWithTarget:self action:@selector(nextView:)]];
     _setPads=[NSMutableArray new];
@@ -227,19 +236,19 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     _subLabel.frame=frame(l.subLabel);_subLabel.font=Mono(l.subSize);
     _noteButton.frame=frame(l.subValue);_noteButton.titleLabel.font=Mono(l.noteSize);
     _levelLabel.frame=frame(l.levelLabel);_levelLabel.font=Mono(l.levelSize);
-    // Align actual font descenders to the same R02 lower typographic edge.
-    if(!l.portrait){
-        const CGFloat bottom=l.kick.y+l.kick.h;
-        for(UILabel *label in @[_subLabel,_levelLabel]){
-            CGRect f=label.frame;f.size.height=label.font.lineHeight;
-            f.origin.y=bottom+label.font.descender-f.size.height;label.frame=f;
-        }
-        for(UIButton *button in @[_kickButton,_noteButton]){
-            CGRect f=button.frame;f.size.height=button.titleLabel.font.lineHeight;
-            f.origin.y=bottom+button.titleLabel.font.descender-f.size.height;button.frame=f;
-        }
-    }
     _levelSlider.frame=frame(l.levelSlider);
+    // Match the visible capital-letter center to the slider track center.
+    // UIKit centers line boxes; differing font sizes otherwise float vertically.
+    const CGFloat rowCenter=l.portrait?CGRectGetMidY(frame(l.kick)):CGRectGetMidY(_levelSlider.frame);
+    auto alignText=[](CGRect f,UIFont *font,CGFloat center){
+        f.size.height=font.lineHeight;
+        f.origin.y=center+font.capHeight/2-(font.ascender+font.descender)/2-f.size.height/2;
+        return f;
+    };
+    _subLabel.frame=alignText(_subLabel.frame,_subLabel.font,rowCenter);
+    _kickButton.frame=alignText(_kickButton.frame,_kickButton.titleLabel.font,rowCenter);
+    _noteButton.frame=alignText(_noteButton.frame,_noteButton.titleLabel.font,rowCenter);
+    _levelLabel.frame=alignText(_levelLabel.frame,_levelLabel.font,CGRectGetMidY(_levelSlider.frame));
     _bpmButton.frame=frame(l.bpm);_bpmButton.titleLabel.font=Mono(l.bpmSize,UIFontWeightMedium);
     _songButton.frame=frame(l.song);_songButton.titleLabel.font=Mono(l.songSize,UIFontWeightMedium);
     _songButton.titleLabel.adjustsFontSizeToFitWidth=YES;_songButton.titleLabel.minimumScaleFactor=.5;
@@ -420,6 +429,10 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
 }
 
 - (void)refreshPage {
+    NSString *title=self.page==0?@"MÉTRONOME":self.page==1?@"PC 01–32":@"PC 33–64";
+    _host.text=title;
+    _host.accessibilityLabel=[title stringByAppendingString:@", vue suivante"];
+
     if(self.canvas.showBars!=(self.page==0)){self.canvas.showBars=self.page==0;[self.canvas setNeedsDisplay];}
     NSDictionary *state=self.frameSnapshot ?: [self.unit transportSnapshot];
     int active=[state[@"pg"] intValue],selected=[state[@"selectedPC"] intValue];
@@ -473,9 +486,6 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     if(pg!=self.seenPG){self.seenPG=pg;[self refreshSong];}
     BOOL synced=[data[@"synced"] boolValue];
     BOOL moving=[data[@"moving"] boolValue];
-    NSString *title=self.page==0?@"MÉTRONOME":self.page==1?@"PC 01–32":@"PC 33–64";
-    _host.text=title;
-    _host.accessibilityLabel=[title stringByAppendingString:@", vue suivante"];
     [_playButton setTitle:moving?@"■":@"▶" forState:UIControlStateNormal];
     [self refreshSong];[self refreshPage];
     double target=[[self.unit currentSong][@"bpm"] doubleValue];
