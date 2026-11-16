@@ -28,11 +28,12 @@ public:
   ProgramAction a;if(local>=0)a=request(local,true,false,h,m);
   return {a,advance(h,m)};
  }
- ProgramAction request(int pc,bool local,bool queued,const HostPosition& h,const ProgramMemory& m) noexcept {
+ void cancel() noexcept {selected=-1;uncertain=false;ramp=false;outputBlocked=false;}
+ ProgramAction request(int pc,bool local,bool queued,const HostPosition& h,const ProgramMemory& m,bool force=false) noexcept {
   if(pc<0 || pc>=64)return {};
   const bool confirmation=!local&&!queued;
   const bool preserveRamp=confirmation&&(pc==selected||pc==active);
-  if(pc==active&&(local||queued)){
+  if(pc==active&&(local||queued)&&!force&&h.moving){
    selected=-1;uncertain=false;ramp=false;outputBlocked=false;return {};
   }
   selected=-1;uncertain=false;outputBlocked=false;

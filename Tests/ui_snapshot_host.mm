@@ -32,10 +32,12 @@
    if(flags)*flags=moving?AUHostTransportStateMoving:(AUHostTransportStateFlags)0;
    if(sample)*sample=beat*48000*60/128;if(start)*start=0;if(end)*end=0;return YES;
   };
+  __block BOOL failTempo=NO;
   NSMutableArray *messages=[NSMutableArray new];
   unit.MIDIOutputEventBlock=^OSStatus(AUEventSampleTime time,uint8_t cable,NSInteger length,const uint8_t *bytes){
    NSMutableArray *data=[NSMutableArray new];for(NSInteger i=0;i<length;++i)[data addObject:@(bytes[i])];
-   [messages addObject:@{@"sample":@(time),@"cable":@(cable),@"bytes":data}];return noErr;
+   [messages addObject:@{@"sample":@(time),@"cable":@(cable),@"bytes":data}];
+   return failTempo&&length==3&&bytes[0]==0xBE&&bytes[1]==118?kAudio_ParamError:noErr;
   };
   assert([unit allocateRenderResourcesAndReturnError:&error] && !error);
   AUInternalRenderBlock render=unit.internalRenderBlock;
@@ -87,6 +89,23 @@
     NSString *file=[NSString stringWithFormat:@"%@/%.0fx%.0f_page%d.png",directory,size.width,size.height,page];
     assert([UIImagePNGRepresentation(image) writeToFile:file atomically:YES]);
    }
+  }
+  // FIX-03/04: title cycle is visual only; eight fixed mini-pads on title row.
+  [vc setValue:@0 forKey:@"page"];[vc updateDisplay:nil];
+  NSDictionary *before=unit.transportSnapshot;
+  UILabel *viewTitle=[vc valueForKey:@"host"];
+  for(int i=0;i<3;++i){
+   UITapGestureRecognizer *tap=(UITapGestureRecognizer*)viewTitle.gestureRecognizers.firstObject;
+   [vc performSelector:@selector(nextView:) withObject:tap];
+  }
+  assert([[vc valueForKey:@"page"] intValue]==0);
+  assert([unit.transportSnapshot[@"pg"] isEqual:before[@"pg"]]);
+  assert([unit.transportSnapshot[@"selectedPC"] isEqual:before[@"selectedPC"]]);
+  assert([unit.transportSnapshot[@"moving"] isEqual:before[@"moving"]]);
+  NSArray<UIButton*> *mini=[vc valueForKey:@"setPads"];assert(mini.count==8);
+  for(UIButton *pad in mini){
+   assert(!pad.hidden && pad.frame.size.height<=viewTitle.font.capHeight);
+   assert(CGRectGetMinX(pad.frame)>=CGRectGetMaxX(viewTitle.frame));
   }
   AURenderEvent event{};event.head.eventType=AURenderEventMIDI;event.head.eventSampleTime=AUEventSampleTimeImmediate;
   event.MIDI.length=2;event.MIDI.data[0]=0xCF;event.MIDI.data[1]=103;input=&event;tick();
@@ -167,6 +186,93 @@
   assert(cycles.selectedSegmentIndex==0);
   moving=NO;tick();[unit selectProgram:10];tick();[vc updateDisplay:nil];
   assert(cycles.selectedSegmentIndex==1); // recall explicit32 when returning to the active project
+
+  // SET AU path: stopped PC/BPM before START, repeated NEXT, replacement and STOP.
+  moving=NO;beat=0;tick();
+  [unit assignSetPosition:1 program:0];[unit assignSetPosition:3 program:1];
+  [unit assignSetPosition:5 program:0];[unit assignSetPosition:6 program:2];
+  [unit setEnabled:YES];tick();
+  NSUInteger setBefore=messages.count;
+  [unit requestPlayGestureLong:NO];tick();tick();
+  assert(unit.currentProgram==0 && [unit.setSnapshot[@"cursor"] intValue]==1);
+  assert([messages[setBefore][@"bytes"] isEqual:(@[@207,@0])]);
+  assert([messages[setBefore+1][@"bytes"] isEqual:(@[@190,@118,@0])]);
+  assert([messages[setBefore+2][@"bytes"] isEqual:playPress]);
+  vc.view.frame=CGRectMake(0,0,1024,768);[vc.view setNeedsLayout];[vc.view layoutIfNeeded];[vc updateDisplay:nil];
+  UIGraphicsImageRenderer *setRenderer=[[UIGraphicsImageRenderer alloc]initWithSize:vc.view.bounds.size];
+  UIImage *setImage=[setRenderer imageWithActions:^(UIGraphicsImageRendererContext *context){[vc.view.layer renderInContext:context.CGContext];}];
+  assert([UIImagePNGRepresentation(setImage) writeToFile:[directory stringByAppendingPathComponent:@"SET_ON_1024x768.png"] atomically:YES]);
+  for(UIButton *pad in mini)assert(!pad.hidden);
+  moving=YES;beat=1;tick();
+  setBefore=messages.count;
+  [unit requestPlayGestureLong:NO];tick();
+  [unit requestPlayGestureLong:NO];tick();
+  assert([unit.transportSnapshot[@"selectedPC"] intValue]==0);
+  assert([unit.setSnapshot[@"cursor"] intValue]==1);
+  for(NSUInteger i=setBefore;i<messages.count;++i)
+   assert(![messages[i][@"bytes"] isEqual:playPress]);
+  // External queued PC replaces pending SET and does not move cursor.
+  event.MIDI.length=2;event.MIDI.data[0]=0xCF;event.MIDI.data[1]=66;input=&event;tick();input=nullptr;
+  assert([unit.transportSnapshot[@"selectedPC"] intValue]==2 && [unit.setSnapshot[@"cursor"] intValue]==1);
+  [unit requestPlayGestureLong:NO];tick();assert([unit.transportSnapshot[@"selectedPC"] intValue]==1);
+  beat=3.99;tick();assert(unit.currentProgram==0);
+  beat=4;tick();assert(unit.currentProgram==1 && [unit.setSnapshot[@"cursor"] intValue]==3);
+  [unit requestPlayGestureLong:NO];tick();[unit requestPlayGestureLong:YES];tick();tick();
+  assert([unit.transportSnapshot[@"selectedPC"] intValue]==-1);
+  beat=8;tick();assert(unit.currentProgram==1);
+  // Independent external-request cable must use the same quantized queue.
+  [unit selectSetPosition:3];tick();
+  event.MIDI.length=2;event.MIDI.cable=1;event.MIDI.data[0]=0xCF;event.MIDI.data[1]=2;input=&event;
+  setBefore=messages.count;tick();input=nullptr;event.MIDI.cable=0;
+  assert(unit.currentProgram==1 && [unit.transportSnapshot[@"selectedPC"] intValue]==2);
+  assert([unit.setSnapshot[@"cursor"] intValue]==3);
+  assert(messages.count==setBefore);
+  beat=12;tick();assert(unit.currentProgram==2);
+  assert([messages[setBefore][@"bytes"] isEqual:(@[@207,@2])]);
+  // RESET exactly at terminal boundary: queue first then reset -> first on PLAY.
+  [unit selectSetPosition:6];tick();beat=16;[unit resetSetCache];tick();
+  assert(unit.currentProgram==2 && [unit.setSnapshot[@"cursor"] intValue]==6);
+  [unit resetSetCache];[unit requestPlayGestureLong:NO];tick();assert([unit.transportSnapshot[@"selectedPC"] intValue]==0);
+  [unit setEnabled:NO];tick();assert([unit.transportSnapshot[@"selectedPC"] intValue]==0);
+  for(int i=0;i<8;++i)[unit assignSetPosition:i program:-1];tick();
+  assert(![unit.setSnapshot[@"on"] boolValue] && [unit.transportSnapshot[@"selectedPC"] intValue]==0);
+  beat=20;tick();assert(unit.currentProgram==0);
+
+  // Review regressions: failed tempo output must not START at the old tempo.
+  moving=NO;tick();[unit assignSetPosition:0 program:1];[unit setEnabled:YES];tick();
+  failTempo=YES;setBefore=messages.count;[unit requestPlayGestureLong:NO];tick();tick();
+  for(NSUInteger i=setBefore;i<messages.count;++i)assert(![messages[i][@"bytes"] isEqual:playPress]);
+  failTempo=NO;
+  // Accessible activation has no preceding TouchDown and still requests short PLAY.
+  UIButton *playControl=[vc valueForKey:@"playButton"];
+  [playControl sendActionsForControlEvents:UIControlEventTouchUpInside];tick();
+  assert([messages.lastObject[@"bytes"] isEqual:playPress]);
+  // Long STOP must override a START not yet acknowledged by the host.
+  setBefore=messages.count;[unit requestPlayGestureLong:YES];tick();tick();tick();
+  BOOL foundStop=NO;for(NSUInteger i=setBefore;i<messages.count;++i)
+   if([messages[i][@"bytes"] isEqual:stopPress])foundStop=YES;
+  assert(foundStop && !moving);
+
+  // Real XONE byte shape from the archived integration, not a CC assumption.
+  moving=YES;tick();[unit requestPlayGestureLong:NO];tick();
+  event.MIDI.length=3;event.MIDI.data[0]=0x9E;event.MIDI.data[1]=12;event.MIDI.data[2]=127;input=&event;
+  setBefore=messages.count;tick();input=nullptr;
+  assert(messages.count==setBefore); // no NEXT at press
+  for(int i=0;i<210;++i)tick();
+  event.MIDI.data[2]=0;input=&event;tick();input=nullptr;tick();
+  assert([unit.transportSnapshot[@"selectedPC"] intValue]==-1);
+  assert([messages[messages.count-2][@"bytes"] isEqual:stopPress]);
+  moving=NO;tick();event.MIDI.data[2]=127;input=&event;setBefore=messages.count;tick();
+  assert(messages.count==setBefore);
+  event.MIDI.data[0]=0x8E;event.MIDI.data[2]=0;tick();input=nullptr;tick();
+  assert([messages[messages.count-2][@"bytes"] isEqual:playPress]);
+  // Autosave payload restores configuration and cursor, never queue or transport.
+  [unit performSelector:@selector(persistSetSnapshot)];
+  Beat4AudioUnit *restored=[[Beat4AudioUnit alloc]initWithComponentDescription:desc options:0 error:&error];
+  assert([restored.setSnapshot[@"slots"] isEqual:unit.setSnapshot[@"slots"]]);
+  assert([restored.setSnapshot[@"cursor"] isEqual:unit.setSnapshot[@"cursor"]]);
+  assert([restored.setSnapshot[@"on"] boolValue]);
+  assert([restored.transportSnapshot[@"selectedPC"] intValue]==-1 && ![restored.transportSnapshot[@"moving"] boolValue]);
 
   NSData *trace=[NSJSONSerialization dataWithJSONObject:@{@"host":@"SIMULATED",@"midiOutput":messages,@"journal":unit.diagnosticLog} options:NSJSONWritingPrettyPrinted error:&error];
   assert(trace && !error && [trace writeToFile:[directory stringByAppendingPathComponent:@"mock-host-midi-trace.json"] atomically:YES]);

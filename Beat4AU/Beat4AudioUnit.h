@@ -15,6 +15,12 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)setKickEnabled:(BOOL)enabled;
 - (NSArray *)diagnosticLog;
 - (void)requestTransportToggle;
+- (void)requestPlayGestureLong:(BOOL)isLong;
+- (NSDictionary *)setSnapshot;
+- (void)setEnabled:(BOOL)enabled;
+- (void)assignSetPosition:(NSInteger)index program:(NSInteger)pc;
+- (void)selectSetPosition:(NSInteger)index;
+- (void)resetSetCache;
 - (void)selectProgram:(NSInteger)pc;
 - (void)setCycleSteps:(NSInteger)steps;
 - (void)saveCurrentCycle;

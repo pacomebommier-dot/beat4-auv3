@@ -1,0 +1,1 @@
+PASS: all 256 SET occupancy masks; 2550 quantified transitions with duplicate SONGS, terminal, reset, stop, external replacement and empty-set queue retention

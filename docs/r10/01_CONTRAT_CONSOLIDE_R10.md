@@ -32,13 +32,18 @@
 - Éditer discrètement **QUEUE (beats)** du PC/SONG identifié (pas de toggle ON/OFF). Champ non renseigné = « — » ; exemple d'indication `QUEUE —` pour absence ; sauvegarde automatique. Conserver la visualisation BPM, MODE, SAVE, SONG et le sélecteur de transport tels que V08/R02.
 - La page MÉTRONOME conserve les quatre barres et leur animation, KICK/SUB/F/LEVEL alignés R02. Les transitions UI ne doivent pas changer la musique ou la page.
 
-## E. BPM et MODE : conserver intégralement le contrat V08
+## E. BPM et cycle — règle validée le 16 novembre 2026
 
-- Deux valeurs séparées : BPM AUM observé vs BPM entier mémorisé par PC et modifié par glissement (sauvegarde automatique hors SAVE). BPM mémoire absent neutre. Orange si cible mémorisée diffère du BPM hôte.
-- Sélecteur MODE toujours GLOBAL 0/1/2 ; MODE PC optionnel mémorisé par SAVE exclusivement, avec indicateur `PC MODE n`. MODE effectif = MODE PC si enregistré, sinon global.
-- En STOP et PAUSE déjà actifs lors du rappel effectif : application immédiate du BPM mémorisé si présent, sans rampe ; en PLAY : MODE 0 sans tempo action, MODE 1 rampe 8 mesures, MODE 2 rampe 2 beats. AUM BPM réellement observé est le départ d'une nouvelle rampe ; ne jamais écraser les mémoires.
-- En présence d'une QUEUE, une demande de PC **ne doit pas lancer prématurément** le changement de SONG/BPM/MODE actif ; déclencher le comportement de réception V08 lorsque le nouveau PC devient effectif. Cette précision temporelle prime sur la formulation V08 « à réception du PC » en cas de PC queued.
-- STOP ou PAUSE pendant rampe : annule définitivement au BPM AUM observé ; pas de reprise automatique. Changement global MODE pendant rampe : ne la modifie pas.
+Cette section remplace les anciennes prescriptions TEMPO MODE 0/1/2 de ce
+contrat. Source prioritaire : contrat consolidé FIX-01 à FIX-04, section 10.1,
+https://docs.google.com/document/d/1w4gBmPr-7Vbj0PpVwWa6BHZRlO3stxKt_OscVtfV8Jk/edit.
+
+- Deux valeurs séparées : BPM AUM observé et BPM entier mémorisé par SONG, réglé par glissement et sauvegardé automatiquement hors SAVE. BPM absent neutre ; orange si la cible diffère du BPM hôte.
+- Transport RUNNING : la rampe commence dès la sélection du SONG, indépendamment du QUEUE. Écart absolu ≤ 10 BPM : UNE mesure ; écart absolu > 10 BPM : DEUX mesures. Même règle en montée et en descente. Le BPM AUM observé est le départ de la rampe ; ne pas écraser les mémoires.
+- Le cycle 16/32 steps du SONG actif détermine la frontière quantifiée du changement de SONG. Il ne détermine pas la durée de la rampe BPM. Le SONG actif ne change pas prématurément du seul fait que la rampe a commencé.
+- Les anciens modes 0/1/2 ne pilotent plus les rampes et ne doivent pas être réintroduits pour FIX-01 à FIX-04. Ce fonctionnement est validé, sans réserve de conformité sur ce point.
+- Transport STOPPED : le rappel du SONG applique immédiatement son BPM enregistré s’il existe. Le rappel PC et l’application du BPM précèdent START, sans délai ni attente supplémentaire. SET ne modifie pas cette règle.
+- STOP ou PAUSE pendant une rampe : annulation au BPM AUM observé, sans reprise automatique, comme dans la base conservée.
 
 ## F. Transport / audio / réseau MIDI
 

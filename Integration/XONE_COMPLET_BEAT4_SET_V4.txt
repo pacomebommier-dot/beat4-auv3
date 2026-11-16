@@ -1,0 +1,48 @@
+@OnLoad
+  SetShortName {XONE BEAT4 SET}
+  SetTimerInterval 100
+  StartTimer
+  if HostRunning = 0
+    SendMIDICC 15, 119, 127
+    SendMIDINoteOff 14, 12, 0
+  else
+    SendMIDICC 15, 119, 0
+    SendMIDINoteOn 14, 12, 127
+  endif
+@End
+
+@OnHostStart
+  SendMIDICC 15, 119, 0
+  SendMIDINoteOn 14, 12, 127
+@End
+
+@OnHostStop
+  SendMIDICC 15, 119, 127
+  SendMIDINoteOff 14, 12, 0
+@End
+
+@OnMidiInput
+  reserved = 0
+  if MIDIChannel = 14 and MIDIByte2 = 12
+    if MIDICommand = 144 or MIDICommand = 128
+      reserved = 1
+    endif
+  endif
+  if reserved = 0
+    SendMIDIThru
+  endif
+@End
+
+@OnSysex
+  SendSysexThru
+@End
+
+@OnTimer
+  if HostRunning = 0
+    SendMIDICC 15, 119, 127
+    SendMIDINoteOff 14, 12, 0
+  else
+    SendMIDICC 15, 119, 0
+    SendMIDINoteOn 14, 12, 127
+  endif
+@End
