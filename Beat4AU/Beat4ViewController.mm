@@ -146,7 +146,7 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     _logo.accessibilityLabel=@"BEAT//4, diagnostic MIDI";
     _logo.accessibilityTraits=UIAccessibilityTraitButton;
     [_logo addGestureRecognizer:[[UITapGestureRecognizer alloc]initWithTarget:self action:@selector(showMIDIDiagnostic:)]];
-    _versionLabel=[self makeLabel:[NSString stringWithFormat:@"v%@",[NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"0.5.15"] size:8 color:RGB(122,145,121)];
+    _versionLabel=[self makeLabel:[NSString stringWithFormat:@"v%@",[NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"0.5.16"] size:8 color:RGB(122,145,121)];
     _modeLabel=[self makeLabel:@"TEMPO MODE" size:10 color:RGB(197,208,197)];
     _pcModeLabel=[self makeLabel:@"" size:10 color:RGB(132,157,136)];
     _host=[[Beat4TitleLabel alloc]init];_host.text=@"MÉTRONOME";
@@ -394,7 +394,7 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
 }
 - (void)confirmResetSet:(UILongPressGestureRecognizer*)gesture {
     if(gesture.state!=UIGestureRecognizerStateBegan)return;
-    UIAlertController *alert=[UIAlertController alertControllerWithTitle:@"RESET CACHE SET" message:@"Reprendre le parcours. Les huit affectations et le QUEUE sont conservés." preferredStyle:UIAlertControllerStyleAlert];
+    UIAlertController *alert=[UIAlertController alertControllerWithTitle:@"RESET CACHE SET" message:@"Revenir au premier pad renseigné. Le SONG actif, les huit affectations et le QUEUE sont conservés." preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"Annuler" style:UIAlertActionStyleCancel handler:nil]];
     __weak Beat4ViewController *weakSelf=self;
     [alert addAction:[UIAlertAction actionWithTitle:@"Confirmer" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){

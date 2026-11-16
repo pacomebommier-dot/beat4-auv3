@@ -55,7 +55,7 @@ struct SetEngine {
   if(!on||first()<0)return {};
   int base=program.selected>=0&&origin==RequestOrigin::Set?queuedPosition:cursor;
   int next=-1;
-  if(base<0 || (restartTerminal&&program.selected<0) || (base>=last()&&(base>=8||slots[base]<0)))next=first();
+  if(base<0 || restartTerminal || (base>=last()&&(base>=8||slots[base]<0)))next=first();
   else {for(int i=base+1;i<8;++i)if(slots[i]>=0){next=i;break;}if(next<0)next=last();}
   restartTerminal=false;
   return request(slots[next],RequestOrigin::Set,next,h,m);
@@ -64,7 +64,7 @@ struct SetEngine {
   if(a.activated<0)return;
   beforeCursor=cursor;beforeActive=activePosition;beforeQueued=queuedPosition;beforeOrigin=origin;beforeReached=reachedPosition;
   activePosition=origin==RequestOrigin::Set?queuedPosition:-1;
-  if(activePosition>=0){cursor=activePosition;reachedPosition=activePosition;}
+  if(activePosition>=0){if(!restartTerminal)cursor=activePosition;reachedPosition=activePosition;}
   queuedPosition=-1;origin=RequestOrigin::None;
  }
  ProgramAction advance(const HostPosition& h,const ProgramMemory& m) noexcept {
@@ -83,6 +83,8 @@ struct SetEngine {
   program.outputFailed(previous,requested);
  }
  void stop() noexcept {program.cancel();queuedPosition=-1;origin=RequestOrigin::None;}
- void reset() noexcept {restartTerminal=cursor>=0&&cursor==last()&&reachedPosition==cursor;}
+ // Legacy persisted name: restartTerminal now means restart at the first filled
+ // occurrence after any RESET, not just after reaching the terminal pad.
+ void reset() noexcept {cursor=first();restartTerminal=cursor>=0;}
 };
 }

@@ -15,13 +15,13 @@ int main(){
  h.beat=4;h.barStart=4;a=s.advance(h,m);assert(a.activated==7 && s.cursor==3);
  s.pad(5,h,m);assert(s.cursor==5 && s.program.active==7);
  s.play(h,m);assert(s.queuedPosition==6);s.play(h,m);assert(s.queuedPosition==6);
- s.reset();assert(s.program.selected==9);s.play(h,m);assert(s.queuedPosition==6);
+ assert(s.program.selected==9);s.play(h,m);assert(s.queuedPosition==6);
  h.beat=8;h.barStart=8;s.advance(h,m);assert(s.cursor==6);
  s.play(h,m);assert(s.queuedPosition==6); // terminal no loop
  h.beat=12;h.barStart=12;s.advance(h,m);s.reset();s.play(h,m);assert(s.queuedPosition==1);
- s.stop();assert(s.program.selected==-1 && s.cursor==6);
+ s.stop();assert(s.program.selected==-1 && s.cursor==1);
  h.beat=16;h.barStart=16;assert(s.advance(h,m).activated<0);
- s.assign(6,-1);s.play(h,m);assert(s.queuedPosition==1); // erased terminal
+ s.assign(6,-1);s.play(h,m);assert(s.queuedPosition==3); // resumes after reset cursor
  s.pad(3,h,m);s.assign(3,-1);assert(s.cursor==3 && s.program.selected==7);
  s.enable(false,h);assert(s.program.selected==7); // OFF preserves queue
  s.advance({true,true,20,20,4,128},m);assert(s.program.active==7);
