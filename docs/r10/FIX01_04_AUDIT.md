@@ -36,3 +36,8 @@ et délègue les gestes à BEAT4 via une liaison matérielle directe distincte.
 La demande externe queued et la confirmation matérielle Circuit doivent rester
 distinctes : quantifier une confirmation déjà exécutée sur Circuit désynchroniserait
 l'affichage et le matériel.
+
+Complément Drive : le ZIP BEAT4_CODEX_PAQUET_R10.zip du 13 novembre
+(ID 1M6scgZvxs57w2qHe9UYafnjXUllPffFK) contient neuf fichiers HTML/CSS/JS
+et documents, sans source AUv3 non publiée. In1 reste dédié au protocole
+Circuit existant ; In2 distingue les demandes indépendantes à quantifier.
