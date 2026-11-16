@@ -32,10 +32,12 @@
    if(flags)*flags=moving?AUHostTransportStateMoving:(AUHostTransportStateFlags)0;
    if(sample)*sample=beat*48000*60/128;if(start)*start=0;if(end)*end=0;return YES;
   };
+  __block BOOL failTempo=NO;
   NSMutableArray *messages=[NSMutableArray new];
   unit.MIDIOutputEventBlock=^OSStatus(AUEventSampleTime time,uint8_t cable,NSInteger length,const uint8_t *bytes){
    NSMutableArray *data=[NSMutableArray new];for(NSInteger i=0;i<length;++i)[data addObject:@(bytes[i])];
-   [messages addObject:@{@"sample":@(time),@"cable":@(cable),@"bytes":data}];return noErr;
+   [messages addObject:@{@"sample":@(time),@"cable":@(cable),@"bytes":data}];
+   return failTempo&&length==3&&bytes[0]==0xBE&&bytes[1]==118?kAudio_ParamError:noErr;
   };
   assert([unit allocateRenderResourcesAndReturnError:&error] && !error);
   AUInternalRenderBlock render=unit.internalRenderBlock;
@@ -221,6 +223,21 @@
   for(int i=0;i<8;++i)[unit assignSetPosition:i program:-1];tick();
   assert(![unit.setSnapshot[@"on"] boolValue] && [unit.transportSnapshot[@"selectedPC"] intValue]==0);
   beat=16;tick();assert(unit.currentProgram==0);
+
+  // Review regressions: failed tempo output must not START at the old tempo.
+  moving=NO;tick();[unit assignSetPosition:0 program:1];[unit setEnabled:YES];tick();
+  failTempo=YES;setBefore=messages.count;[unit requestPlayGestureLong:NO];tick();tick();
+  for(NSUInteger i=setBefore;i<messages.count;++i)assert(![messages[i][@"bytes"] isEqual:playPress]);
+  failTempo=NO;
+  // Accessible activation has no preceding TouchDown and still requests short PLAY.
+  UIButton *playControl=[vc valueForKey:@"playButton"];
+  [playControl sendActionsForControlEvents:UIControlEventTouchUpInside];tick();
+  assert([messages.lastObject[@"bytes"] isEqual:playPress]);
+  // Long STOP must override a START not yet acknowledged by the host.
+  setBefore=messages.count;[unit requestPlayGestureLong:YES];tick();tick();tick();
+  BOOL foundStop=NO;for(NSUInteger i=setBefore;i<messages.count;++i)
+   if([messages[i][@"bytes"] isEqual:stopPress])foundStop=YES;
+  assert(foundStop && !moving);
 
   NSData *trace=[NSJSONSerialization dataWithJSONObject:@{@"host":@"SIMULATED",@"midiOutput":messages,@"journal":unit.diagnosticLog} options:NSJSONWritingPrettyPrinted error:&error];
   assert(trace && !error && [trace writeToFile:[directory stringByAppendingPathComponent:@"mock-host-midi-trace.json"] atomically:YES]);

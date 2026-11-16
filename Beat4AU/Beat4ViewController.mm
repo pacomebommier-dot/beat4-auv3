@@ -362,8 +362,9 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
 }
 - (void)playDown:(id)sender {(void)sender;self.playPressTime=CACurrentMediaTime();}
 - (void)playUp:(id)sender {
-    (void)sender;if(self.playPressTime<=0)return;
-    [self.unit requestPlayGestureLong:CACurrentMediaTime()-self.playPressTime>=beat4::PressRelease::longSeconds];
+    (void)sender;
+    // VoiceOver and keyboard activation can send TouchUpInside without TouchDown.
+    [self.unit requestPlayGestureLong:self.playPressTime>0 && CACurrentMediaTime()-self.playPressTime>=beat4::PressRelease::longSeconds];
     self.playPressTime=0;
 }
 - (void)playCancel:(id)sender {(void)sender;self.playPressTime=0;}

@@ -26,6 +26,15 @@ int main(){
  s.enable(false,h);assert(s.program.selected==7); // OFF preserves queue
  s.advance({true,true,20,20,4,128},m);assert(s.program.active==7);
  for(int i=0;i<8;++i){s.assign(i,-1);}assert(!s.on);
+ // Page selection retains historical cancellation when selecting ACTIVE.
+ SetEngine page;page.program.active=3;page.request(6,RequestOrigin::Page,-1,h,m);
+ page.request(3,RequestOrigin::Page,-1,h,m);assert(page.program.selected==-1);
+ // Failed SET output keeps effective cursor and pending occurrence separate.
+ SetEngine failed;failed.assign(0,3);failed.assign(1,7);failed.on=true;
+ failed.play({true,false,0,0,4,128},m);
+ failed.play(h,m);auto failedAction=failed.advance({true,true,20,20,4,128},m);
+ failed.outputFailed(3,failedAction.activated);
+ assert(failed.cursor==0&&failed.program.active==3&&failed.program.selected==7&&failed.queuedPosition==1);
  // STOPPED repeated recall must still apply stored tempo.
  ProgramEngine p;p.request(3,true,false,{true,false,0,0,4,128},m);
  assert(p.request(3,true,false,{true,false,0,0,4,128},m).tempo==117);

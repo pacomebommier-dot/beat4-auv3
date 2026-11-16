@@ -297,27 +297,30 @@ Snapshot load(const State& s) noexcept {
         int previousActive=s->engine.active;
         auto apply=[&](beat4::ProgramAction a){
             if(a.sendPC){
-                if(!midiOut){s->journal.write(6,a.activated,1,beat);s->set.outputFailed(previousActive,a.activated);return;}
+                if(!midiOut){s->journal.write(6,a.activated,1,beat);s->set.outputFailed(previousActive,a.activated);return false;}
                 // Immediate PC at our boundary, avoiding a second native Circuit queue.
                 auto message=beat4::circuitMessage(a.activated);
                 const auto status=midiOut(sampleTime,message.cable,message.length,message.bytes.data());
                 s->journal.write(status==noErr?4:6,a.activated,1,beat);
-                if(status!=noErr){s->set.outputFailed(previousActive,a.activated);return;}
+                if(status!=noErr){s->set.outputFailed(previousActive,a.activated);return false;}
             }
             if(a.activated>=0){s->journal.write(3,a.activated,a.sendPC?1:0,beat);previousActive=a.activated;}
             if(midiOut && beat4::shouldEmitTempo(a,s->lastTempoSent)){
                 auto message=beat4::tempoMessage(a.tempo);
                 if(message.length){
                     const auto status=midiOut(sampleTime,message.cable,message.length,message.bytes.data());
-                    if(status==noErr)s->lastTempoSent=a.tempo;else s->journal.write(6,s->engine.active,2,beat);
+                    if(status==noErr)s->lastTempoSent=a.tempo;
+                    else {s->journal.write(6,s->engine.active,2,beat);return false;}
                 }
             }
+            if(!midiOut && beat4::shouldEmitTempo(a,s->lastTempoSent))return false;
+            return true;
         };
         auto playGesture=[&](bool longPress){
             if(!s->set.on){s->transportPulse.request(moving);return;}
-            if(longPress){s->set.stop();if(moving)s->transportPulse.receive(0xFC);return;}
-            apply(s->set.play(position,s->memories));
-            if(!moving && s->engine.selected<0)s->transportPulse.receive(0xFA);
+            if(longPress){s->set.stop();s->transportPulse.receive(0xFC);return;}
+            const bool delivered=apply(s->set.play(position,s->memories));
+            if(delivered && !moving && s->engine.selected<0)s->transportPulse.receive(0xFA);
         };
         for(const AURenderEvent *e=events;e!=nullptr;e=e->head.next){
             if(e->head.eventType==AURenderEventParameter || e->head.eventType==AURenderEventParameterRamp){
@@ -540,7 +543,7 @@ Snapshot load(const State& s) noexcept {
 }
 - (void)setKickLevel:(float)level {float clamped=std::fmax(0.f,std::fmin(1.f,level));_state->kickLevel.store(clamped);_levelParameter.value=clamped;}
 - (void)setKickEnabled:(BOOL)enabled {_state->kickEnabled.store(enabled);_enabledParameter.value=enabled?1:0;}
-- (void)requestTransportToggle { [self refreshHostCallbacks:YES];_state->transportRequest.store(1); }
+- (void)requestTransportToggle { [self refreshHostCallbacks:YES];_state->enqueue(4); }
 - (NSDictionary*)setSnapshot {
     const uint64_t bits=_state->setPublished.load();NSMutableArray *slots=[NSMutableArray new];
     for(int i=0;i<8;++i)[slots addObject:@((int)((bits>>(7*i))&127)-1)];

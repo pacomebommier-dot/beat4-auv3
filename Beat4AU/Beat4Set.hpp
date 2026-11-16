@@ -37,7 +37,7 @@ struct SetEngine {
  ProgramAction request(int pc,RequestOrigin source,int index,const HostPosition& h,const ProgramMemory& m) noexcept {
   if(pc<0||pc>=64)return {};
   origin=source;queuedPosition=source==RequestOrigin::Set?index:-1;
-  auto a=program.request(pc,source!=RequestOrigin::External,source==RequestOrigin::External,h,m,true);
+  auto a=program.request(pc,source!=RequestOrigin::External,source==RequestOrigin::External,h,m,source==RequestOrigin::Set);
   executed(a);return a;
  }
  ProgramAction pad(int index,const HostPosition& h,const ProgramMemory& m) noexcept {
