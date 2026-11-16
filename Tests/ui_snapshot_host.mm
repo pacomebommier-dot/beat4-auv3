@@ -248,9 +248,23 @@
   assert(messages.count==setBefore);
   beat=12;tick();assert(unit.currentProgram==2);
   assert([messages[setBefore][@"bytes"] isEqual:(@[@207,@2])]);
+  // RESET from an intermediate pad: immediate published cursor + visible marker,
+  // no transport/PC output, both ON and OFF; sparse first slot is index 1.
+  for(NSNumber *enabled in @[@YES,@NO]){
+   [unit setEnabled:enabled.boolValue];[unit selectSetPosition:3];tick();
+   NSUInteger count=messages.count;
+   NSInteger active=unit.currentProgram,queued=[unit.transportSnapshot[@"selectedPC"] integerValue];
+   [unit resetSetCache];tick();[vc updateDisplay:nil];
+   assert([unit.setSnapshot[@"cursor"] intValue]==1);
+   assert(unit.currentProgram==active && [unit.transportSnapshot[@"selectedPC"] integerValue]==queued);
+   assert(messages.count==count);
+   assert([mini[1].accessibilityLabel containsString:@"curseur"]);
+   assert(![mini[3].accessibilityLabel containsString:@"curseur"]);
+  }
+  [unit setEnabled:YES];tick();
   // RESET exactly at terminal boundary: queue first then reset -> first on PLAY.
   [unit selectSetPosition:6];tick();beat=16;[unit resetSetCache];tick();
-  assert(unit.currentProgram==2 && [unit.setSnapshot[@"cursor"] intValue]==6);
+  assert(unit.currentProgram==2 && [unit.setSnapshot[@"cursor"] intValue]==1);
   [unit resetSetCache];[unit requestPlayGestureLong:NO];tick();assert([unit.transportSnapshot[@"selectedPC"] intValue]==0);
   [unit setEnabled:NO];tick();assert([unit.transportSnapshot[@"selectedPC"] intValue]==0);
   for(int i=0;i<8;++i)[unit assignSetPosition:i program:-1];tick();
