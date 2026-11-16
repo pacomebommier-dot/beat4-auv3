@@ -14,8 +14,9 @@ Code final `fe6edf31558fa4c9eb063f92001d4e5bab11b220`.
 - IPA 0.5.13 historique téléchargée et vérifiée : version/build/arm64 et SHA256 concordants.
 - CI finale : https://github.com/pacomebommier-dot/beat4-auv3/actions/runs/43927933565 — SUCCESS : tests natifs et captures UIKit, build iOS et paquet IPA réussis.
 
-Limites : les anciens modes 0/1/2 ne gouvernent déjà plus les rampes dans la
-base 0.5.13. Ces rampes sont conservées. In1 garde le protocole Circuit
+**Règle validée par l’utilisateur le 16 novembre 2026 :** en RUNNING, la rampe BPM commence dès la sélection du SONG, indépendamment du QUEUE. Un écart absolu ≤ 10 BPM donne une rampe d’une mesure ; un écart > 10 BPM donne deux mesures, en montée comme en descente. Le cycle 16/32 steps du SONG actif règle la frontière de changement de SONG, pas la durée de la rampe. Les anciens modes 0/1/2 ne pilotent plus les rampes. À STOPPED, le BPM enregistré est appliqué immédiatement avant START. Ce comportement est validé et ne constitue pas un écart de conformité.
+
+In1 garde le protocole Circuit
 (confirmations PC 0–63, demandes queued 64–127) ; In2 reçoit les demandes de
 contrôleurs indépendants, quantifiées sans déplacement du curseur SET.
 

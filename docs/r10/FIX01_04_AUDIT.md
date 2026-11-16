@@ -16,7 +16,7 @@ IPA historique 0.5.13 build13, SHA256 indiqué dans CYCLES_16_32_0513.md ; pas d
 | QUEUE unique / 16–32 | déjà implémenté | ProgramEngine.selected, schedule ; tests portables PASS |
 | PC Circuit | déjà implémenté | canal16, 0–63 confirmations, 64–127 demandes queued |
 | BPM à l'arrêt | partiel | activate applique BPM ; rappel du SONG déjà actif retourne avant application |
-| TEMPO MODE 0/1/2 | partiel | mémoire legacy présente ; moteur 0.5.13 à rampes indépendantes du mode ; sélecteur UI 16/32 |
+| Rampes BPM / cycle 16–32 | déjà implémenté, règle validée | dès la sélection : écart absolu ≤ 10 BPM = une mesure, > 10 BPM = deux ; indépendantes du QUEUE et des anciens modes 0/1/2 ; 16/32 gouverne la frontière du SONG |
 | transport AUM | déjà implémenté | CC110/111 canal16, anti-doublon, release au buffer suivant |
 | gestes XONE | absent | seuls realtime FA/FB/FC et PC décodés ; aucun press/release XONE vérifié |
 | persistance | partiel | SONGS UserDefaults v2 ; pas de SET ; ni transport ni queue restaurés |
@@ -41,3 +41,7 @@ Complément Drive : le ZIP BEAT4_CODEX_PAQUET_R10.zip du 13 novembre
 (ID 1M6scgZvxs57w2qHe9UYafnjXUllPffFK) contient neuf fichiers HTML/CSS/JS
 et documents, sans source AUv3 non publiée. In1 reste dédié au protocole
 Circuit existant ; In2 distingue les demandes indépendantes à quantifier.
+
+Confirmation fonctionnelle du 16 novembre 2026 : les rampes décrites ci-dessus
+sont la règle validée et attendue. Toute ancienne réserve de conformité fondée
+sur l’absence des modes 0/1/2 est levée. La recette physique reste à exécuter.

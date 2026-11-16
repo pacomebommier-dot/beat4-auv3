@@ -47,7 +47,7 @@ Le V4 est un texte candidat, dont la compilation et l’exécution Mozaic resten
 | XONE | Press seul : aucun NEXT en SET ON. Release court : NEXT ou PLAY normal selon le contexte. Hold ≥ 0,5 s puis release : un STOP, aucun NEXT préalable. Tester Note Off, Note On 0 et répétitions pendant un maintien. |
 | iPad | Courts/longs équivalents ; sortir du bouton avant release annule. VoiceOver = PLAY court. SET OFF garde le toggle normal. Long déjà STOPPED ne relance pas. |
 | BPM arrêté | Rappeler un PC, y compris le SONG déjà actif : son BPM enregistré est appliqué immédiatement avant START, sans délai ajouté. |
-| Tempo RUNNING | Comparer les pentes montantes/descendantes avec 0.5.13. La base expose 16/32 et des rampes indépendantes des anciens modes 0/1/2 ; ce décalage préexistant est signalé dans l’audit. |
+| Tempo RUNNING | Règle validée le 16/11/2026 : rampe dès la sélection, indépendante du QUEUE ; écart absolu ≤ 10 BPM : une mesure ; > 10 BPM : deux mesures, en montée et descente. Tester notamment 10 et 11 BPM. Le cycle actif 16/32 règle la frontière du SONG, pas la rampe ; les anciens modes 0/1/2 ne la pilotent plus. |
 | Persistance | Réouvrir AU/AUM : affectations, ON/OFF et curseur restaurés ; aucun START ni QUEUE périmé. Tester un curseur sur un pad devenu vide. |
 | Échec MIDI | Sortie indisponible/échec : aucune fausse activation locale ni START après échec BPM. Consulter le journal, rebrancher puis rappeler explicitement. |
 | Frontières | Demandes à frontière − un buffer, frontière, frontière + un buffer. STOP LONG avant advance dans le même buffer ; RESET après le QUEUE échu. Aucune exécution anticipée. L’ordre sample-exact intra-buffer n’est pas garanti par le moteur historique. |

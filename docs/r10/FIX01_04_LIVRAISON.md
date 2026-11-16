@@ -80,9 +80,7 @@ candidate dans 06_LIVRAISONS. La version courante 0.5.13 reste en place jusqu’
 3. Circuit → In1 conserve les confirmations PC 0–63 et demandes queued 64–127. Les contrôleurs PC indépendants utilisent In2 pour leurs demandes quantifiées. Cette séparation évite de confondre une confirmation matérielle déjà exécutée avec une intention future.
 4. Exécuter la fiche jointe, enregistrer les sondes PRE/POST, tester les frontières et remplir les résultats PASS/FAIL.
 
-**Écart préexistant :** la base 0.5.13 expose 16/32 steps et des rampes indépendantes
-des anciens modes 0/1/2. Ces rampes sont conservées ; aucun mode historique n’a été
-réinventé. Ce décalage entre la terminologie historique et le code courant reste signalé.
+**Règle validée par l’utilisateur le 16 novembre 2026 :** en RUNNING, la rampe BPM commence dès la sélection du SONG, indépendamment du QUEUE. Un écart absolu ≤ 10 BPM donne une rampe d’une mesure ; un écart > 10 BPM donne deux mesures, en montée comme en descente. Le cycle 16/32 steps du SONG actif règle la frontière de changement de SONG, pas la durée de la rampe. Les anciens modes 0/1/2 ne pilotent plus les rampes. À STOPPED, le BPM enregistré est appliqué immédiatement avant START. Ce comportement est validé et ne constitue pas un écart de conformité.
 
 Les collisions sont ordonnées au buffer render : STOP LONG avant advance ; RESET
 après le QUEUE échu. L’ordre exact entre événements au sein d’un buffer n’est pas
