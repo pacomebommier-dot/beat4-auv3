@@ -3,6 +3,9 @@
 NS_ASSUME_NONNULL_BEGIN
 @interface Beat4AudioUnit : AUAudioUnit
 // Main-thread API. MIDI/render callback reads only realtime-safe atomics.
+- (nullable NSDictionary *)previewConfigurationData:(NSData *)data error:(NSError * _Nullable * _Nullable)error;
+- (BOOL)importConfigurationData:(NSData *)data error:(NSError * _Nullable * _Nullable)error;
+- (nullable NSData *)exportConfigurationData:(NSError * _Nullable * _Nullable)error;
 - (NSDictionary<NSString *, NSNumber *> *)transportSnapshot;
 - (uint64_t)displayRevision;
 - (NSInteger)currentProgram;

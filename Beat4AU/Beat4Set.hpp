@@ -85,6 +85,14 @@ struct SetEngine {
  void stop() noexcept {program.cancel();queuedPosition=-1;origin=RequestOrigin::None;}
  // Legacy persisted name: restartTerminal now means restart at the first filled
  // occurrence after any RESET, not just after reaching the terminal pad.
+ void configure(const std::array<int,8>& assignments,bool enabled,int position,bool restart) noexcept {
+  slots=assignments;
+  cursor=first()<0?-1:(position==-1?-1:(position>=0&&position<8?position:first()));
+  on=enabled&&first()>=0;restartTerminal=restart&&cursor>=0;
+  activePosition=-1;reachedPosition=-1;
+  // A queued SONG belongs to the old SET. Preserve its PC, not its old index.
+  if(origin==RequestOrigin::Set){origin=RequestOrigin::External;queuedPosition=-1;}
+ }
  void reset() noexcept {cursor=first();restartTerminal=cursor>=0;}
 };
 }

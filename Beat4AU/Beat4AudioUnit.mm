@@ -14,6 +14,8 @@
 #import "Beat4Set.hpp"
 #import "Beat4Journal.hpp"
 #import "Beat4Store.h"
+#import "Beat4Config.h"
+#include <mutex>
 #import "Beat4Kick.hpp"
 #import "Beat4BeatGate.hpp"
 #import "Beat4AudioGain.hpp"
@@ -43,7 +45,9 @@ struct State {
     beat4::Journal journal;
     beat4::SetEngine set;
     beat4::ProgramEngine& engine=set.program; // render thread only
-    struct Command {int kind=0,index=0,value=0;};
+    struct Command {int kind=0,index=0,value=0;std::array<int,8> slots{};uint64_t serial=0;};
+    std::mutex producerMutex; // Never acquired by the render thread.
+    std::atomic<uint64_t> appliedConfiguration{0};
     std::array<Command,256> commands{};
     std::atomic<unsigned> readCommand{0},writeCommand{0};
     std::atomic<uint64_t> setPublished{0};
@@ -51,9 +55,18 @@ struct State {
     beat4::PressRelease xone;
     double gestureClock=0;
     bool enqueue(int kind,int index=0,int value=0) noexcept {
+        std::lock_guard<std::mutex> guard(producerMutex);
         const unsigned w=writeCommand.load(),next=(w+1)%commands.size();
         if(next==readCommand.load(std::memory_order_acquire))return false;
         commands[w]={kind,index,value};writeCommand.store(next,std::memory_order_release);return true;
+    }
+    bool enqueueConfiguration(const std::array<int,8>& slots,bool on,int cursor,bool restart,uint64_t serial) noexcept {
+        std::lock_guard<std::mutex> guard(producerMutex);
+        const unsigned w=writeCommand.load(),next=(w+1)%commands.size();
+        if(next==readCommand.load(std::memory_order_acquire))return false;
+        Command command;command.kind=6;command.slots=slots;command.index=cursor;
+        command.value=(on?1:0)|(restart?2:0);command.serial=serial;
+        commands[w]=command;writeCommand.store(next,std::memory_order_release);return true;
     }
     uint64_t packedSet() const noexcept {
         uint64_t bits=0;for(int i=0;i<8;++i)bits|=uint64_t(set.slots[i]+1)<<(7*i);
@@ -117,7 +130,9 @@ Snapshot load(const State& s) noexcept {
     dispatch_source_t _setPersistenceTimer;
     uint64_t _lastPersistedSet;
     int _lastPersistedReached;
-    NSMutableDictionary<NSString*,NSDictionary*> *_songCache; // UI thread only
+    NSMutableDictionary<NSString*,NSDictionary*> *_songCache; // Protected by @synchronized(self), never used in render.
+    NSDictionary *_pendingImportedSet;
+    uint64_t _setImportSerial;
 }
 - (void)refreshHostCallbacks:(BOOL)replace;
 @end
@@ -379,6 +394,7 @@ Snapshot load(const State& s) noexcept {
         if(local>=0)apply(s->set.request(local,beat4::RequestOrigin::Page,-1,position,s->memories));
         // Preserve FIFO order, including RESET followed by PLAY in one buffer.
         // RESET alone first executes any queue due exactly at this boundary.
+        uint64_t appliedConfiguration=0;
         unsigned r=s->readCommand.load();
         const unsigned w=s->writeCommand.load(std::memory_order_acquire);
         while(r!=w){
@@ -388,6 +404,11 @@ Snapshot load(const State& s) noexcept {
             else if(command.kind==3)apply(s->set.pad(command.index,position,s->memories));
             else if(command.kind==4)playGesture(command.value!=0);
             else if(command.kind==5){apply(s->set.advance(position,s->memories));s->set.reset();}
+            else if(command.kind==6){
+                apply(s->set.advance(position,s->memories));
+                s->set.configure(command.slots,(command.value&1)!=0,command.index,(command.value&2)!=0);
+                appliedConfiguration=command.serial;
+            }
             r=(r+1)%s->commands.size();
         }
         s->readCommand.store(r,std::memory_order_release);
@@ -401,6 +422,7 @@ Snapshot load(const State& s) noexcept {
         s->setReached.store(s->set.reachedPosition);s->setActive.store(s->set.activePosition);s->setQueued.store(s->set.queuedPosition);
         const auto packed=s->packedSet();
         if(packed!=s->setPublished.exchange(packed))s->revision.fetch_add(1);
+        if(appliedConfiguration)s->appliedConfiguration.store(appliedConfiguration,std::memory_order_release);
         if(midiOut){
             const auto message=s->transportPulse.next();
             if(message.length){
@@ -512,13 +534,76 @@ Snapshot load(const State& s) noexcept {
     for(const auto& r:_state->journal.read())[result addObject:@{@"event":@(r.event),@"pc":@(r.pc),@"origin":@(r.origin),@"beat":@(r.beat)}];
     return result;
 }
+- (NSDictionary*)previewConfigurationData:(NSData*)data error:(NSError**)error {
+    NSDictionary *configuration=beat4::parseConfigurationData(data,error);if(!configuration)return nil;
+    int unsupported=0;for(NSDictionary *song in [configuration[@"songs"] allValues])
+        if([song[@"bpm"] doubleValue]>0&&beat4::tempoCC7([song[@"bpm"] doubleValue])<0)++unsupported;
+    return @{@"songs":@([configuration[@"songs"] count]),@"set":@(configuration[@"set"]!=nil),@"unsupportedTempos":@(unsupported)};
+}
+- (BOOL)applyConfiguration:(NSDictionary*)configuration replaceSongs:(BOOL)replace error:(NSError**)error {
+    @synchronized(self){
+        NSDictionary *set=configuration[@"set"];
+        if(set){
+            std::array<int,8> slots;for(int i=0;i<8;++i)slots[i]=[set[@"slots"][i] intValue];
+            const uint64_t serial=_setImportSerial+1;
+            if(!_state->enqueueConfiguration(slots,[set[@"on"] boolValue],[set[@"cursor"] intValue],[set[@"restart"] boolValue],serial)){
+                beat4::configError(error,@"BEAT4 est occupé. Réessayez après le prochain buffer audio.");return NO;
+            }
+            _setImportSerial=serial;_pendingImportedSet=[set copy];
+            [NSUserDefaults.standardUserDefaults setObject:set forKey:@"beat4.set.v1"];
+        }
+        if(configuration[@"songs"]){
+            _songCache=beat4::mergeSongPatches(replace?@{}:_songCache,configuration[@"songs"]);
+            for(int pc=0;pc<64;++pc){
+                NSDictionary *entry=_songCache[[NSString stringWithFormat:@"%d",pc]];
+                _state->tempos[pc].store([entry[@"bpm"] doubleValue]);
+                _state->notes[pc].store(entry?[entry[@"sub"] intValue]:-1);
+                _state->queues[pc].store([entry[@"queue"] intValue]);
+                _state->cycleSteps[pc].store([entry[@"steps"] intValue]==32?32:16);
+            }
+            beat4::writeSongStore(NSUserDefaults.standardUserDefaults,[_songCache copy]);
+        }
+        _state->revision.fetch_add(1);return YES;
+    }
+}
+- (BOOL)importConfigurationData:(NSData*)data error:(NSError**)error {
+    NSDictionary *configuration=beat4::parseConfigurationData(data,error);
+    return configuration?[self applyConfiguration:configuration replaceSongs:NO error:error]:NO;
+}
+- (NSData*)exportConfigurationData:(NSError**)error {
+    @synchronized(self){return beat4::configurationData([_songCache copy],[self setSnapshot],error);}
+}
+- (NSDictionary*)fullState {
+    @synchronized(self){
+        NSMutableDictionary *state=[[super fullState] mutableCopy]?:[NSMutableDictionary new];
+        if(_state){NSData *data=[self exportConfigurationData:nil];if(data){state[@"BEAT4ConfigurationJSON"]=data;state[@"BEAT4ConfigurationMode"]=@"replace";}}
+        return state;
+    }
+}
+- (void)setFullState:(NSDictionary*)state {
+    @synchronized(self){
+        if(_state&&state[@"BEAT4ConfigurationJSON"]){
+            id data=state[@"BEAT4ConfigurationJSON"];if(![data isKindOfClass:NSData.class])return;
+            NSDictionary *config=beat4::parseConfigurationData(data,nil);if(!config)return;
+            if(![self applyConfiguration:config replaceSongs:[state[@"BEAT4ConfigurationMode"] isEqual:@"replace"] error:nil])return;
+        }
+        [super setFullState:state];
+    }
+}
+- (NSDictionary*)fullStateForDocument {return [self fullState];}
+- (void)setFullStateForDocument:(NSDictionary*)state {[self setFullState:state];}
+
 - (NSInteger)currentProgram {return load(*_state).pg;}
 - (NSDictionary<NSString*,id>*)currentSong {
+    @synchronized(self){
     NSInteger pg=[self currentProgram];
     if(!beat4::validProgram((int)pg))return @{@"title":@"UNKNOWN",@"bpm":@0,@"sub":@(-1)};
     return _songCache[[NSString stringWithFormat:@"%ld",(long)pg]] ?: @{@"title":@"UNKNOWN",@"bpm":@0,@"sub":@(-1)};
+
+    }
 }
 - (void)persistSong:(NSDictionary*)song program:(NSInteger)pg {
+    @synchronized(self){
     if(!beat4::validProgram((int)pg))return;
     NSString *key=[NSString stringWithFormat:@"%ld",(long)pg];
     _songCache[key]=song;_state->revision.fetch_add(1);
@@ -529,33 +614,52 @@ Snapshot load(const State& s) noexcept {
     _state->notes[pg].store(beat4::validSub((int)note)?(int)note:-1);
     _state->queues[pg].store([song[@"queue"] intValue]);
     _state->cycleSteps[pg].store([song[@"steps"] intValue]==32?32:16);
+
+    }
 }
 - (void)saveSongTitle:(NSString*)title {
+    @synchronized(self){
     NSInteger pg=[self currentProgram];if(!beat4::validProgram((int)pg))return;
     NSMutableDictionary *entry=[[self currentSong] mutableCopy];
     NSString *clean=[[title stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] copy];
     entry[@"title"]=clean.length?clean:@"UNKNOWN";
     [self persistSong:entry program:pg];
+
+    }
 }
 - (void)saveSongBPM:(double)bpm { [self saveSongBPM:bpm program:[self currentProgram]]; }
 - (void)saveSongBPM:(double)bpm program:(NSInteger)pg {
+    @synchronized(self){
     if(pg<0 || pg>=64 || !beat4::validBPM(bpm))return;
     NSMutableDictionary *entry=[[self songForProgram:pg] mutableCopy];
     entry[@"bpm"]=@(std::round(bpm));[self persistSong:entry program:pg];
+
+    }
 }
 - (void)saveSongSubNote:(NSInteger)note {
+    @synchronized(self){
     NSInteger pg=[self currentProgram];
     if(!beat4::validProgram((int)pg)||!beat4::validSub((int)note))return;
     NSMutableDictionary *entry=[[self currentSong] mutableCopy];entry[@"sub"]=@(note);
     [self persistSong:entry program:pg];
+
+    }
 }
 - (void)setKickLevel:(float)level {float clamped=std::fmax(0.f,std::fmin(1.f,level));_state->kickLevel.store(clamped);_levelParameter.value=clamped;}
 - (void)setKickEnabled:(BOOL)enabled {_state->kickEnabled.store(enabled);_enabledParameter.value=enabled?1:0;}
 - (void)requestTransportToggle { [self refreshHostCallbacks:YES];_state->enqueue(4); }
 - (NSDictionary*)setSnapshot {
+    @synchronized(self){
+    if(_pendingImportedSet&&_state->appliedConfiguration.load(std::memory_order_acquire)<_setImportSerial){
+        NSMutableDictionary *pending=[_pendingImportedSet mutableCopy];
+        pending[@"activePosition"]=@(-1);pending[@"queuedPosition"]=@(-1);pending[@"reachedPosition"]=@(-1);return pending;
+    }
+
     const uint64_t bits=_state->setPublished.load();NSMutableArray *slots=[NSMutableArray new];
     for(int i=0;i<8;++i)[slots addObject:@((int)((bits>>(7*i))&127)-1)];
     return @{@"slots":slots,@"cursor":@((int)((bits>>56)&15)-1),@"on":@((bits>>60)&1),@"restart":@((bits>>61)&1),@"reachedPosition":@(_state->setReached.load()),@"activePosition":@(_state->setActive.load()),@"queuedPosition":@(_state->setQueued.load())};
+
+    }
 }
 - (void)setEnabled:(BOOL)enabled {_state->enqueue(1,0,enabled);}
 - (void)assignSetPosition:(NSInteger)index program:(NSInteger)pc {
@@ -574,17 +678,26 @@ Snapshot load(const State& s) noexcept {
     [self saveCycleSteps:snapshot.cycleSteps program:snapshot.pg];
 }
 - (void)saveCycleSteps:(NSInteger)steps program:(NSInteger)pc {
+    @synchronized(self){
     if(pc<0 || pc>=64 || (steps!=16 && steps!=32))return;
     NSMutableDictionary *entry=[[self songForProgram:pc] mutableCopy];
     entry[@"steps"]=@(steps);[self persistSong:entry program:pc];
     if(pc==[self currentProgram])_state->draftSteps.store((int)steps);
+
+    }
 }
 - (NSDictionary*)songForProgram:(NSInteger)pc {
+    @synchronized(self){
     return _songCache[[NSString stringWithFormat:@"%ld",(long)pc]] ?: @{@"title":@"UNKNOWN",@"bpm":@0,@"sub":@(-1)};
+
+    }
 }
 - (void)saveQueue:(NSInteger)beats program:(NSInteger)pc {
+    @synchronized(self){
     if(pc<0 || pc>=64 || beats<0 || beats>65536)return;
     NSMutableDictionary *entry=[[self songForProgram:pc] mutableCopy];
     entry[@"queue"]=@(beats);[self persistSong:entry program:pc];
+
+    }
 }
 @end
