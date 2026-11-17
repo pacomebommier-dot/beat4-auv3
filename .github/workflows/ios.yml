@@ -32,6 +32,10 @@ jobs:
         run: |
           clang++ -std=c++17 -fobjc-arc Tests/test_persistence.mm -framework Foundation -o "$RUNNER_TEMP/test_persistence"
           "$RUNNER_TEMP/test_persistence"
+      - name: Configuration file validation and partial merge tests
+        run: |
+          clang++ -std=c++17 -fobjc-arc Tests/test_config.mm -framework Foundation -o "$RUNNER_TEMP/test_config"
+          "$RUNNER_TEMP/test_config"
       - name: Show build environment
         run: xcodebuild -version
       - name: Compile unsigned BEAT4 container and extension
@@ -55,13 +59,13 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/Payload"
           cp -a "$RUNNER_TEMP/Beat4DerivedData/Build/Products/Release-iphoneos/BEAT4.app" "$RUNNER_TEMP/Payload/"
-          (cd "$RUNNER_TEMP" && zip -qry "$GITHUB_WORKSPACE/BEAT4_R10_V0_5_16_BUILD16_UNSIGNED.ipa" Payload)
-          python3 Tools/verify_ipa.py BEAT4_R10_V0_5_16_BUILD16_UNSIGNED.ipa --version 0.5.16 --build 16
-          shasum -a 256 BEAT4_R10_V0_5_16_BUILD16_UNSIGNED.ipa > BEAT4_R10_IPA_SHA256.txt
+          (cd "$RUNNER_TEMP" && zip -qry "$GITHUB_WORKSPACE/BEAT4_R10_V0_5_17_BUILD17_UNSIGNED.ipa" Payload)
+          python3 Tools/verify_ipa.py BEAT4_R10_V0_5_17_BUILD17_UNSIGNED.ipa --version 0.5.17 --build 17
+          shasum -a 256 BEAT4_R10_V0_5_17_BUILD17_UNSIGNED.ipa > BEAT4_R10_IPA_SHA256.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: BEAT4-R10-V0-5-16-UNSIGNED-IPA
+          name: BEAT4-R10-V0-5-17-UNSIGNED-IPA
           path: |
-            BEAT4_R10_V0_5_16_BUILD16_UNSIGNED.ipa
+            BEAT4_R10_V0_5_17_BUILD17_UNSIGNED.ipa
             BEAT4_R10_IPA_SHA256.txt
           if-no-files-found: error

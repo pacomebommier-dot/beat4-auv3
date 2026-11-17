@@ -91,7 +91,7 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
 }
 @end
 
-@interface Beat4ViewController ()
+@interface Beat4ViewController () <UIDocumentPickerDelegate>
 @property(nonatomic,strong)Beat4AudioUnit *unit;
 @property(nonatomic,strong)Beat4Canvas *canvas;
 @property(nonatomic,strong)CADisplayLink *clock;
@@ -143,10 +143,10 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     _logo=[self makeLabel:@"BEAT//4" size:20 color:RGB(228,230,219)];
     _logo.font=Mono(20,UIFontWeightSemibold);
     _logo.userInteractionEnabled=YES;
-    _logo.accessibilityLabel=@"BEAT//4, diagnostic MIDI";
+    _logo.accessibilityLabel=@"BEAT//4, menu SONGS et SET";
     _logo.accessibilityTraits=UIAccessibilityTraitButton;
-    [_logo addGestureRecognizer:[[UITapGestureRecognizer alloc]initWithTarget:self action:@selector(showMIDIDiagnostic:)]];
-    _versionLabel=[self makeLabel:[NSString stringWithFormat:@"v%@",[NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"0.5.16"] size:8 color:RGB(122,145,121)];
+    [_logo addGestureRecognizer:[[UITapGestureRecognizer alloc]initWithTarget:self action:@selector(showConfigurationMenu:)]];
+    _versionLabel=[self makeLabel:[NSString stringWithFormat:@"v%@",[NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"0.5.17"] size:8 color:RGB(122,145,121)];
     _modeLabel=[self makeLabel:@"TEMPO MODE" size:10 color:RGB(197,208,197)];
     _pcModeLabel=[self makeLabel:@"" size:10 color:RGB(132,157,136)];
     _host=[[Beat4TitleLabel alloc]init];_host.text=@"MÉTRONOME";
@@ -277,6 +277,61 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     }
     _noteButton.menu=[UIMenu menuWithChildren:actions];
     _noteButton.showsMenuAsPrimaryAction=YES;
+}
+- (void)configurationMessage:(NSString*)message {
+    UIAlertController *alert=[UIAlertController alertControllerWithTitle:@"SONGS / SET" message:message preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+    [self presentViewController:alert animated:YES completion:nil];
+}
+- (void)showConfigurationMenu:(id)sender {
+    (void)sender;
+    UIAlertController *menu=[UIAlertController alertControllerWithTitle:@"SONGS / SET" message:@"Importer ou sauvegarder les SONGS et les huit positions du SET." preferredStyle:UIAlertControllerStyleActionSheet];
+    __weak Beat4ViewController *weakSelf=self;
+    [menu addAction:[UIAlertAction actionWithTitle:@"Importer un fichier SONGS / SET" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){
+        (void)action;UIDocumentPickerViewController *picker=[[UIDocumentPickerViewController alloc]initWithDocumentTypes:@[@"public.json"] inMode:UIDocumentPickerModeImport];
+        picker.delegate=weakSelf;picker.allowsMultipleSelection=NO;[weakSelf presentViewController:picker animated:YES completion:nil];
+    }]];
+    [menu addAction:[UIAlertAction actionWithTitle:@"Exporter SONGS / SET" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){(void)action;[weakSelf exportConfiguration];}]];
+    [menu addAction:[UIAlertAction actionWithTitle:@"Diagnostic MIDI" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){(void)action;[weakSelf showMIDIDiagnostic:nil];}]];
+    [menu addAction:[UIAlertAction actionWithTitle:@"Annuler" style:UIAlertActionStyleCancel handler:nil]];
+    menu.popoverPresentationController.sourceView=_logo;menu.popoverPresentationController.sourceRect=_logo.bounds;
+    [self presentViewController:menu animated:YES completion:nil];
+}
+- (void)documentPicker:(UIDocumentPickerViewController*)controller didPickDocumentsAtURLs:(NSArray<NSURL*>*)urls {
+    (void)controller;NSURL *url=urls.firstObject;if(!url)return;
+    BOOL access=[url startAccessingSecurityScopedResource];NSError *error=nil;NSNumber *size=nil;
+    [url getResourceValue:&size forKey:NSURLFileSizeKey error:&error];
+    NSData *data=nil;
+    if(!error&&size.unsignedLongLongValue<=1024*1024)data=[NSData dataWithContentsOfURL:url options:0 error:&error];
+    if(access)[url stopAccessingSecurityScopedResource];
+    if(!data){[self configurationMessage:error.localizedDescription?:@"Fichier trop volumineux (maximum 1 Mo)."];return;}
+    NSDictionary *summary=[self.unit previewConfigurationData:data error:&error];
+    if(!summary){[self configurationMessage:error.localizedDescription];return;}
+    NSString *message=[NSString stringWithFormat:@"%@ SONG(S), %@. Les champs absents seront conservés. Aucun PLAY, STOP ou PC ne sera envoyé.",summary[@"songs"],[summary[@"set"] boolValue]?@"SET inclus":@"SET conservé"];
+    if([summary[@"unsupportedTempos"] intValue]>0)message=[message stringByAppendingFormat:@"\n%@ BPM seront mémorisés mais ne peuvent pas être transmis à AUM par le routage actuel (50–177 BPM).",summary[@"unsupportedTempos"]];
+    UIAlertController *alert=[UIAlertController alertControllerWithTitle:@"Charger la configuration ?" message:message preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Annuler" style:UIAlertActionStyleCancel handler:nil]];
+    __weak Beat4ViewController *weakSelf=self;
+    [alert addAction:[UIAlertAction actionWithTitle:@"Charger" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){
+        (void)action;NSError *failure=nil;
+        if([weakSelf.unit importConfigurationData:data error:&failure]){[weakSelf refreshSong];[weakSelf refreshPage];[weakSelf configurationMessage:@"Configuration chargée. Sauvegardez la session AUM pour la retrouver à sa réouverture."];}
+        else [weakSelf configurationMessage:failure.localizedDescription];
+    }]];
+    [self presentViewController:alert animated:YES completion:nil];
+}
+- (void)exportConfiguration {
+    NSError *error=nil;NSData *data=[self.unit exportConfigurationData:&error];
+    if(!data){[self configurationMessage:error.localizedDescription];return;}
+    NSURL *directory=[[NSURL fileURLWithPath:NSTemporaryDirectory() isDirectory:YES] URLByAppendingPathComponent:NSUUID.UUID.UUIDString isDirectory:YES];
+    if(![NSFileManager.defaultManager createDirectoryAtURL:directory withIntermediateDirectories:YES attributes:nil error:&error]){[self configurationMessage:error.localizedDescription];return;}
+    NSURL *url=[directory URLByAppendingPathComponent:@"BEAT4_SONGS_SET.json"];
+    if(![data writeToURL:url options:NSDataWritingAtomic error:&error]){[self configurationMessage:error.localizedDescription];return;}
+    UIActivityViewController *share=[[UIActivityViewController alloc]initWithActivityItems:@[url] applicationActivities:nil];
+    share.popoverPresentationController.sourceView=_logo;share.popoverPresentationController.sourceRect=_logo.bounds;
+    share.completionWithItemsHandler=^(UIActivityType activity,BOOL completed,NSArray *items,NSError *failure){
+        (void)activity;(void)completed;(void)items;(void)failure;[NSFileManager.defaultManager removeItemAtURL:directory error:nil];
+    };
+    [self presentViewController:share animated:YES completion:nil];
 }
 - (void)showMIDIDiagnostic:(id)sender {
     (void)sender;
@@ -439,9 +494,11 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     for(int i=0;i<32;++i){
         UIButton *pad=_pads[i];pad.hidden=self.page==0;int pc=((int)self.page-1)*32+i;
         [pad setTitle:[NSString stringWithFormat:@"%02d",pc+1] forState:UIControlStateNormal];
-        pad.backgroundColor=pc==active?RGB(240,240,235):pc==selected?RGB(135,135,135):RGB(25,29,26);
+        NSDictionary *song=[self.unit songForProgram:pc];NSString *name=song[@"title"];
+        const BOOL configured=(name.length>0&&![name isEqual:@"UNKNOWN"])||[song[@"bpm"] doubleValue]>=20||(song[@"sub"]&&[song[@"sub"] intValue]>=0);
+        pad.backgroundColor=pc==active?RGB(240,240,235):pc==selected?RGB(135,135,135):configured?RGB(27,50,35):RGB(25,29,26);
         [pad setTitleColor:pc==active||pc==selected?RGB(10,12,10):RGB(190,196,187) forState:UIControlStateNormal];
-        pad.accessibilityLabel=[NSString stringWithFormat:@"SONG %02d %@",pc+1,pc==active?@"ACTIF":pc==selected?@"SÉLECTIONNÉ":@"ÉTEINT"];
+        pad.accessibilityLabel=[NSString stringWithFormat:@"SONG %02d %@",pc+1,pc==active?@"ACTIF":pc==selected?@"SÉLECTIONNÉ":configured?@"RENSEIGNÉ":@"ÉTEINT"];
     }
     NSDictionary *set=[self.unit setSnapshot];NSArray *slots=set[@"slots"];
     const int cursor=[set[@"cursor"] intValue];

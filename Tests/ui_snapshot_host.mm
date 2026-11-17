@@ -93,9 +93,11 @@
      for(UIButton *pad in pads){
       int pc=(page-1)*32+(int)pad.tag;
       assert(!pad.hidden);
-      assert([pad.accessibilityLabel containsString:pc==7?@"ACTIF":pc==39?@"SÉLECTIONNÉ":@"ÉTEINT"]);
+      assert([pad.accessibilityLabel containsString:pc==7?@"ACTIF":pc==39?@"SÉLECTIONNÉ":pc==6?@"RENSEIGNÉ":@"ÉTEINT"]);
       CGFloat r=0,g=0,b=0,a=0;assert([pad.backgroundColor getRed:&r green:&g blue:&b alpha:&a]);
       assert(pc==7?r>.9:pc==39?r>.5 && r<.6:r<.15);
+      if(pc==6)assert(g>.18&&g>r); // saved BPM, neutral green
+      if(pc==5)assert(g<.15); // genuinely unconfigured
      }
     }
     UIGraphicsImageRendererFormat *format=[UIGraphicsImageRendererFormat defaultFormat];format.scale=1;
@@ -307,6 +309,64 @@
   assert([restored.setSnapshot[@"on"] boolValue]);
   assert([restored.transportSnapshot[@"selectedPC"] intValue]==-1 && ![restored.transportSnapshot[@"moving"] boolValue]);
 
+  // Portable bank + SET: same API as the native JSON picker and AU state.
+  error=nil;
+  Beat4AudioUnit *bank=[[Beat4AudioUnit alloc]initWithComponentDescription:desc options:0 error:&error];
+  assert(bank&&!error);
+  NSDictionary *payload=@{@"format":@"BEAT4_CONFIG",@"version":@1,
+    @"songs":@[@{@"song":@1,@"name":@"PORTABLE",@"bpm":@137,@"sub":@"Do#",@"steps":@32},@{@"song":@64,@"bpm":@240,@"sub":@"Ré"}],
+    @"set":@{@"slots":@[@1,[NSNull null],@64,[NSNull null],[NSNull null],[NSNull null],[NSNull null],[NSNull null]],@"on":@YES}};
+  NSData *config=[NSJSONSerialization dataWithJSONObject:payload options:0 error:&error];
+  NSDictionary *summary=[bank previewConfigurationData:config error:&error];
+  assert([summary[@"songs"] intValue]==2&&[summary[@"set"] boolValue]&&[summary[@"unsupportedTempos"] intValue]==1);
+  assert([bank importConfigurationData:config error:&error]&&!error);
+  assert([[bank songForProgram:0][@"title"] isEqual:@"PORTABLE"]&&[[bank songForProgram:0][@"sub"] intValue]==1);
+  assert([[bank songForProgram:63][@"bpm"] intValue]==240&&[[bank songForProgram:63][@"sub"] intValue]==2);
+  NSDictionary *portable=bank.fullDocumentState;
+  assert([portable[@"BEAT4ConfigurationJSON"] isKindOfClass:NSData.class]);
+  // AU state must remain a valid property list (JSON nulls live inside NSData).
+  assert([NSPropertyListSerialization dataWithPropertyList:portable format:NSPropertyListBinaryFormat_v1_0 options:0 error:&error]);
+  Beat4AudioUnit *bankRestored=[[Beat4AudioUnit alloc]initWithComponentDescription:desc options:0 error:&error];
+  NSData *extra=[@"{\"format\":\"BEAT4_CONFIG\",\"version\":1,\"songs\":[{\"song\":61,\"name\":\"ONLY_LOCAL\"}]}" dataUsingEncoding:NSUTF8StringEncoding];
+  assert([bankRestored importConfigurationData:extra error:&error]);
+  bankRestored.fullDocumentState=portable;
+  assert(![[bankRestored songForProgram:60][@"title"] isEqual:@"ONLY_LOCAL"]);
+  assert([[bank exportConfigurationData:&error] isEqual:[bankRestored exportConfigurationData:&error]]);
+  assert([bankRestored.setSnapshot[@"cursor"] intValue]==0&&[bankRestored.setSnapshot[@"slots"][2] intValue]==63);
+  // Partial import keeps fields and songs absent from the file.
+  NSData *partial=[@"{\"format\":\"BEAT4_CONFIG\",\"version\":1,\"songs\":[{\"song\":1,\"name\":\"RENAMED\"}]}" dataUsingEncoding:NSUTF8StringEncoding];
+  assert([bankRestored importConfigurationData:partial error:&error]);
+  assert([[bankRestored songForProgram:0][@"bpm"] intValue]==137&&[[bankRestored songForProgram:0][@"steps"] intValue]==32);
+  assert([[bankRestored songForProgram:63][@"bpm"] intValue]==240);
+  NSData *beforeBad=[bankRestored exportConfigurationData:&error];
+  error=nil;assert(![bankRestored importConfigurationData:[@"{}" dataUsingEncoding:NSUTF8StringEncoding] error:&error]&&error);
+  error=nil;assert([[bankRestored exportConfigurationData:&error] isEqual:beforeBad]);
+  // Restore before rendering, then render: no PC, START or transport restored.
+  NSUInteger midiBefore=messages.count;
+  bankRestored.MIDIOutputEventBlock=unit.MIDIOutputEventBlock;
+  assert([bankRestored allocateRenderResourcesAndReturnError:&error]);
+  AUInternalRenderBlock bankRender=bankRestored.internalRenderBlock;
+  float bankSamples[256]={};AudioBufferList bankBuffers{};bankBuffers.mNumberBuffers=1;bankBuffers.mBuffers[0]={2,sizeof(bankSamples),bankSamples};
+  AudioTimeStamp bankStamp{};bankStamp.mFlags=kAudioTimeStampSampleTimeValid;OSStatus bankStatus=0;
+  AudioUnitRenderActionFlags bankFlags=0;
+  bankStatus=bankRender(&bankFlags,&bankStamp,128,0,&bankBuffers,nullptr,nil);assert(bankStatus==noErr);
+  assert(messages.count==midiBefore&&bankRestored.currentProgram==-1&&[bankRestored.transportSnapshot[@"selectedPC"] intValue]==-1);
+  assert([bankRestored.setSnapshot[@"cursor"] intValue]==0&&[bankRestored.setSnapshot[@"on"] boolValue]);
+  [bankRestored deallocateRenderResources];
+  // Name-only and note-only configuration also mark PC pads; musical colors win.
+  NSData *colorData=[@"{\"format\":\"BEAT4_CONFIG\",\"version\":1,\"songs\":[{\"song\":30,\"name\":\"NAMED\"},{\"song\":31,\"sub\":\"C\"}]}" dataUsingEncoding:NSUTF8StringEncoding];
+  assert([unit importConfigurationData:colorData error:&error]);
+  [vc setValue:@1 forKey:@"page"];[vc updateDisplay:nil];
+  for(int index: {29,30}){
+    UIButton *pad=[[vc valueForKey:@"pads"] objectAtIndex:index];
+    CGFloat r=0,g=0,b=0,a=0;[pad.backgroundColor getRed:&r green:&g blue:&b alpha:&a];
+    assert(g>.18&&g>r&&[pad.accessibilityLabel containsString:@"RENSEIGNÉ"]);
+  }
+  [vc performSelector:@selector(showConfigurationMenu:) withObject:nil];
+  UIAlertController *menu=(UIAlertController*)vc.presentedViewController;
+  assert([menu isKindOfClass:UIAlertController.class]&&menu.actions.count==4);
+  assert([menu.actions[0].title containsString:@"Importer"]&&[menu.actions[1].title containsString:@"Exporter"]);
+  [vc dismissViewControllerAnimated:NO completion:nil];
   NSData *trace=[NSJSONSerialization dataWithJSONObject:@{@"host":@"SIMULATED",@"midiOutput":messages,@"journal":unit.diagnosticLog} options:NSJSONWritingPrettyPrinted error:&error];
   assert(trace && !error && [trace writeToFile:[directory stringByAppendingPathComponent:@"mock-host-midi-trace.json"] atomically:YES]);
   // A host may query the block before negotiation and install callbacks after allocation.
