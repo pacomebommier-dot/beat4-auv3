@@ -15,6 +15,11 @@ int main(){@autoreleasepool{
  assert([back[@"songs"][@"0"][@"title"] isEqual:@"TEST"]);
  auto set=parse(@{@"format":@"BEAT4_CONFIG",@"version":@1,@"set":@{@"slots":@[[NSNull null],@64,@1,[NSNull null],[NSNull null],[NSNull null],[NSNull null],[NSNull null]],@"on":@YES}});
  assert([set[@"set"][@"cursor"] intValue]==1&&[set[@"set"][@"slots"][1] intValue]==63);
+ // Existing app-edited names have no 160-character limit.
+ NSString *longName=[@"TITLE" stringByPaddingToLength:500 withString:@"x" startingAtIndex:0];
+ auto longSongs=beat4::mergeSongPatches(@{},@{@"0":@{@"title":longName}});
+ e=nil;NSData *longData=beat4::configurationData(longSongs,nil,&e);assert(longData&&!e);
+ auto longBack=beat4::parseConfigurationData(longData,&e);assert([longBack[@"songs"][@"0"][@"title"] isEqual:longName]);
  // Clearing the current pad preserves its traversal position; export must work.
  NSDictionary *cleared=@{@"slots":@[@(-1),@(-1),@3,@(-1),@(-1),@(-1),@(-1),@(-1)],@"on":@YES,@"cursor":@1,@"restart":@NO};
  e=nil;NSData *clearedData=beat4::configurationData(merged,cleared,&e);assert(clearedData&&!e);

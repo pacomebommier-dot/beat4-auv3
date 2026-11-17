@@ -40,7 +40,7 @@ inline NSDictionary *parseConfigurationData(NSData *data,NSError **error){
    if(row[@"name"]){
     if(![row[@"name"] isKindOfClass:NSString.class])return configError(error,@"Le nom doit être du texte.");
     NSString *name=[row[@"name"] stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-    if(name.length==0||name.length>160)return configError(error,@"Le nom doit contenir entre 1 et 160 caractères.");
+    if(name.length==0)return configError(error,@"Le nom doit contenir au moins un caractère.");
     p[@"title"]=name;
    }
    if(row[@"bpm"]){if(!configNumber(row[@"bpm"],0,240)||([row[@"bpm"] intValue]>0&&[row[@"bpm"] intValue]<20))return configError(error,@"BPM attendu : entier 20–240, ou 0 pour non renseigné.");p[@"bpm"]=row[@"bpm"];}

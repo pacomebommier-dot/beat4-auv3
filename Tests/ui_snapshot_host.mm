@@ -322,14 +322,14 @@
   assert([bank importConfigurationData:config error:&error]&&!error);
   assert([[bank songForProgram:0][@"title"] isEqual:@"PORTABLE"]&&[[bank songForProgram:0][@"sub"] intValue]==1);
   assert([[bank songForProgram:63][@"bpm"] intValue]==240&&[[bank songForProgram:63][@"sub"] intValue]==2);
-  NSDictionary *portable=bank.fullDocumentState;
+  NSDictionary *portable=bank.fullStateForDocument;
   assert([portable[@"BEAT4ConfigurationJSON"] isKindOfClass:NSData.class]);
   // AU state must remain a valid property list (JSON nulls live inside NSData).
   assert([NSPropertyListSerialization dataWithPropertyList:portable format:NSPropertyListBinaryFormat_v1_0 options:0 error:&error]);
   Beat4AudioUnit *bankRestored=[[Beat4AudioUnit alloc]initWithComponentDescription:desc options:0 error:&error];
   NSData *extra=[@"{\"format\":\"BEAT4_CONFIG\",\"version\":1,\"songs\":[{\"song\":61,\"name\":\"ONLY_LOCAL\"}]}" dataUsingEncoding:NSUTF8StringEncoding];
   assert([bankRestored importConfigurationData:extra error:&error]);
-  bankRestored.fullDocumentState=portable;
+  bankRestored.fullStateForDocument=portable;
   assert(![[bankRestored songForProgram:60][@"title"] isEqual:@"ONLY_LOCAL"]);
   assert([[bank exportConfigurationData:&error] isEqual:[bankRestored exportConfigurationData:&error]]);
   assert([bankRestored.setSnapshot[@"cursor"] intValue]==0&&[bankRestored.setSnapshot[@"slots"][2] intValue]==63);

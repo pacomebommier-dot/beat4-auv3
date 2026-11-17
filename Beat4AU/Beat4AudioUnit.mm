@@ -590,8 +590,8 @@ Snapshot load(const State& s) noexcept {
         [super setFullState:state];
     }
 }
-- (NSDictionary*)fullDocumentState {return [self fullState];}
-- (void)setFullDocumentState:(NSDictionary*)state {[self setFullState:state];}
+- (NSDictionary*)fullStateForDocument {return [self fullState];}
+- (void)setFullStateForDocument:(NSDictionary*)state {[self setFullState:state];}
 
 - (NSInteger)currentProgram {return load(*_state).pg;}
 - (NSDictionary<NSString*,id>*)currentSong {
