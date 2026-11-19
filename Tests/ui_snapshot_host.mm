@@ -25,9 +25,9 @@
   AudioComponentDescription desc={kAudioUnitType_MusicDevice,'bt04','B4MT',0,0};
   Beat4AudioUnit *unit=(Beat4AudioUnit*)[vc createAudioUnitWithComponentDescription:desc error:&error];
   assert(unit && !error);
-  __block BOOL moving=NO;__block double beat=0;
+  __block BOOL moving=NO;__block double beat=0,hostBPM=128;
   unit.musicalContextBlock=^BOOL(double *tempo,double *num,NSInteger *den,double *position,NSInteger *offset,double *downbeat){
-   if(tempo)*tempo=128;if(num)*num=4;if(den)*den=4;if(position)*position=beat;
+   if(tempo)*tempo=hostBPM;if(num)*num=4;if(den)*den=4;if(position)*position=beat;
    if(offset)*offset=0;if(downbeat)*downbeat=std::floor(beat/4)*4;return YES;
   };
   unit.transportStateBlock=^BOOL(AUHostTransportStateFlags *flags,double *sample,double *start,double *end){
@@ -374,12 +374,14 @@
   [vc setValue:@YES forKey:@"bpmDragging"];
   [vc setValue:@(unit.currentProgram) forKey:@"bpmDragProgram"];
   [vc setValue:@128 forKey:@"bpmDragTarget"];
-  [vc updateDisplay:nil];
+  hostBPM=128.4;tick();[vc updateDisplay:nil];
+  assert([[(UILabel*)[vc valueForKey:@"hostBPM"] text] isEqual:@"HOST 128 BPM"]);
   assert([bpmControl.currentTitleColor isEqual:UIColor.whiteColor]);
   [vc setValue:@129 forKey:@"bpmDragTarget"];
   [vc updateDisplay:nil];
   assert(![bpmControl.currentTitleColor isEqual:UIColor.whiteColor]);
   [vc setValue:@NO forKey:@"bpmDragging"];
+  hostBPM=128;tick();
 
   [vc performSelector:@selector(showConfigurationMenu:) withObject:nil];
   UIAlertController *menu=(UIAlertController*)vc.presentedViewController;

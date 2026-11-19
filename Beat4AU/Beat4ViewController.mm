@@ -390,7 +390,7 @@ static UIColor *circuitColor(NSInteger index){
     [self presentViewController:alert animated:YES completion:nil];
 }
 - (void)refreshBPMColorForTarget:(double)target host:(double)host {
-    const bool matches=host>0&&std::round(target*10)==std::round(host*10);
+    const bool matches=host>0&&std::round(target)==std::round(host);
     [_bpmButton setTitleColor:beat4::validBPM(target)?(matches?UIColor.whiteColor:RGB(235,155,65)):RGB(110,120,111) forState:UIControlStateNormal];
 }
 - (void)refreshSong {
@@ -675,8 +675,7 @@ static UIColor *circuitColor(NSInteger index){
     _playButton.accessibilityLabel=moving?(setOn?@"SONG suivant, appui long pour arrêter":@"Arrêter"):@"Démarrer";
     [self refreshSong];[self refreshPage];
     const double host=[data[@"bpm"] doubleValue];
-    NSString *tempo=host>0?[[NSString stringWithFormat:@"%.1f",host] stringByReplacingOccurrencesOfString:@"." withString:@","]:@"—";
-    if([tempo hasSuffix:@",0"])tempo=[tempo substringToIndex:tempo.length-2];
+    NSString *tempo=host>0?[NSString stringWithFormat:@"%.0f",std::round(host)]:@"—";
     _hostBPM.text=[NSString stringWithFormat:@"HOST %@ BPM",tempo];
     BOOL enabled=[data[@"kickEnabled"] boolValue];
     [_kickButton setTitleColor:enabled?RGB(177,225,164):RGB(110,120,111) forState:UIControlStateNormal];
