@@ -117,7 +117,7 @@ static UIColor *circuitColor(NSInteger index){
 }
 @end
 
-@interface Beat4ViewController () <UIDocumentPickerDelegate>
+@interface Beat4ViewController () <UIDocumentPickerDelegate,UIContextMenuInteractionDelegate>
 @property(nonatomic,strong)Beat4AudioUnit *unit;
 @property(nonatomic,strong)Beat4Canvas *canvas;
 @property(nonatomic,strong)CADisplayLink *clock;
@@ -138,7 +138,7 @@ static UIColor *circuitColor(NSInteger index){
 @property(nonatomic,assign)NSInteger page,editedPC;
 @property(nonatomic,strong)UISlider *levelSlider;
 @property(nonatomic,assign)NSInteger seenPG;
-@property(nonatomic,assign)double bpmDragStart;
+@property(nonatomic,assign)double bpmDragStart,bpmDragTarget;
 @property(nonatomic,assign)CGFloat bpmDragOriginX;
 @property(nonatomic,assign)NSInteger bpmDragProgram;
 @property(nonatomic,assign)BOOL bpmDragging;
@@ -174,7 +174,7 @@ static UIColor *circuitColor(NSInteger index){
     _logo.accessibilityLabel=@"BEAT//4, menu SONGS et SET";
     _logo.accessibilityTraits=UIAccessibilityTraitButton;
     [_logo addGestureRecognizer:[[UITapGestureRecognizer alloc]initWithTarget:self action:@selector(showConfigurationMenu:)]];
-    _versionLabel=[self makeLabel:[NSString stringWithFormat:@"v%@",[NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"0.5.18"] size:8 color:RGB(122,145,121)];
+    _versionLabel=[self makeLabel:[NSString stringWithFormat:@"v%@",[NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"0.5.19"] size:8 color:RGB(122,145,121)];
     _modeLabel=[self makeLabel:@"QUEUE" size:10 color:RGB(197,208,197)];
     _hostBPM=[self makeLabel:@"" size:12 color:RGB(145,148,145)];
     _host=[[Beat4TitleLabel alloc]init];_host.text=@"MÉTRONOME";
@@ -233,8 +233,7 @@ static UIColor *circuitColor(NSInteger index){
         UIButton *pad=[UIButton buttonWithType:UIButtonTypeCustom];pad.tag=i;
         pad.titleLabel.font=Mono(15);pad.layer.cornerRadius=4;
         [pad addTarget:self action:@selector(selectPad:) forControlEvents:UIControlEventTouchUpInside];
-        UILongPressGestureRecognizer *edit=[[UILongPressGestureRecognizer alloc]initWithTarget:self action:@selector(editPadQueue:)];
-        [pad addGestureRecognizer:edit];
+        [pad addInteraction:[[UIContextMenuInteraction alloc] initWithDelegate:self]];
         [_pageRegion addSubview:pad];[_pads addObject:pad];
     }
     _modeControl=[[UISegmentedControl alloc]initWithItems:@[@"16",@"32"]];
@@ -436,6 +435,7 @@ static UIColor *circuitColor(NSInteger index){
         double stored=[[self.unit currentSong][@"bpm"] doubleValue];
         double host=[[self.unit transportSnapshot][@"bpm"] doubleValue];
         self.bpmDragStart=beat4::initialDraggedBPM(stored,host);
+        self.bpmDragTarget=self.bpmDragStart;
         self.bpmDragOriginX=0;
     }
     if(!self.bpmDragging)return;
@@ -445,6 +445,7 @@ static UIColor *circuitColor(NSInteger index){
         // Absolute displacement, not accumulated deltas: no runaway or drift.
         CGFloat dx=[gesture translationInView:self.view].x-self.bpmDragOriginX;
         double target=beat4::draggedBPM((int)self.bpmDragStart,dx);
+        self.bpmDragTarget=target;
         [_bpmButton setTitle:[NSString stringWithFormat:@"%.0f BPM",target] forState:UIControlStateNormal];
         if(gesture.state==UIGestureRecognizerStateEnded){
             [self.unit saveSongBPM:target program:self.bpmDragProgram];
@@ -544,30 +545,42 @@ static UIColor *circuitColor(NSInteger index){
         if(self.setEditPosition>=0)[self.unit assignSetPosition:self.setEditPosition program:pc];
     }else [self.unit selectProgram:pc];[self refreshPage];
 }
-- (void)editPadQueue:(UILongPressGestureRecognizer*)gesture {
-    if(self.setEditing || gesture.state!=UIGestureRecognizerStateBegan)return;
-    self.editedPC=(self.page-1)*32+gesture.view.tag;
-    const NSInteger pc=self.editedPC;
+- (UIMenu *)padColorMenuForProgram:(NSInteger)pc {
     NSArray *labels=@[@"Rouge",@"Jaune moutarde",@"Vert foncé",@"Rose",@"Bleu",@"Saumon",@"Vert vif",@"Orange"];
     NSDictionary *song=[self.unit songForProgram:pc];
+    NSString *overrideColor=song[@"padColor"];
+    NSInteger selected=(beat4::namedSong(song)||overrideColor.length)?circuitColorIndex(pc,overrideColor):-1;
     NSString *title=[NSString stringWithFormat:@"Couleur · PCh %02ld%@",(long)pc+1,
         beat4::namedSong(song)?[NSString stringWithFormat:@" · %@",song[@"title"]]:@""];
-    UIAlertController *menu=[UIAlertController alertControllerWithTitle:title message:nil preferredStyle:UIAlertControllerStyleAlert];
+    NSMutableArray<UIMenuElement *> *actions=[NSMutableArray new];
     __weak Beat4ViewController *weakSelf=self;
+    UIImage *dot=[UIImage systemImageNamed:@"circle.fill"];
     for(NSUInteger i=0;i<labels.count;++i){
         NSString *color=beat4::rampPaletteNames()[i];
-        [menu addAction:[UIAlertAction actionWithTitle:labels[i] style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){
+        UIImage *swatch=[dot imageWithTintColor:circuitColor(i) renderingMode:UIImageRenderingModeAlwaysOriginal];
+        UIAction *item=[UIAction actionWithTitle:labels[i] image:swatch identifier:nil handler:^(__kindof UIAction *action){
             (void)action;[weakSelf.unit savePadColor:color program:pc];[weakSelf refreshPage];
-        }]];
+        }];
+        item.state=selected==(NSInteger)i?UIMenuElementStateOn:UIMenuElementStateOff;
+        [actions addObject:item];
     }
-    [menu addAction:[UIAlertAction actionWithTitle:@"Couleur par défaut" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){
+    UIAction *reset=[UIAction actionWithTitle:@"Couleur par défaut" image:nil identifier:nil handler:^(__kindof UIAction *action){
         (void)action;[weakSelf.unit savePadColor:@"" program:pc];[weakSelf refreshPage];
-    }]];
-    [menu addAction:[UIAlertAction actionWithTitle:@"Modifier QUEUE" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){
+    }];
+    [actions addObject:reset];
+    [actions addObject:[UIAction actionWithTitle:@"Modifier QUEUE" image:nil identifier:nil handler:^(__kindof UIAction *action){
         (void)action;weakSelf.editedPC=pc;[weakSelf editQueue:nil];
     }]];
-    [menu addAction:[UIAlertAction actionWithTitle:@"Annuler" style:UIAlertActionStyleCancel handler:nil]];
-    [self presentViewController:menu animated:YES completion:nil];
+    return [UIMenu menuWithTitle:title children:actions];
+}
+- (UIContextMenuConfiguration *)contextMenuInteraction:(UIContextMenuInteraction *)interaction configurationForMenuAtLocation:(CGPoint)location {
+    (void)location;
+    if(self.setEditing||self.page==0)return nil;
+    const NSInteger pc=(self.page-1)*32+interaction.view.tag;
+    __weak Beat4ViewController *weakSelf=self;
+    return [UIContextMenuConfiguration configurationWithIdentifier:nil previewProvider:nil actionProvider:^UIMenu *(NSArray<UIMenuElement *> *suggestedActions){
+        (void)suggestedActions;return [weakSelf padColorMenuForProgram:pc];
+    }];
 }
 - (void)editQueue:(id)sender {
     (void)sender;const NSInteger pc=self.editedPC;
@@ -654,7 +667,7 @@ static UIColor *circuitColor(NSInteger index){
     [_playButton setTitle:moving&&!setOn?@"■":@"▶" forState:UIControlStateNormal];
     _playButton.accessibilityLabel=moving?(setOn?@"SONG suivant, appui long pour arrêter":@"Arrêter"):@"Démarrer";
     [self refreshSong];[self refreshPage];
-    double target=[[self.unit currentSong][@"bpm"] doubleValue];
+    double target=self.bpmDragging&&self.bpmDragProgram==pg?self.bpmDragTarget:[[self.unit currentSong][@"bpm"] doubleValue];
     const double host=[data[@"bpm"] doubleValue];
     NSString *tempo=host>0?[[NSString stringWithFormat:@"%.1f",host] stringByReplacingOccurrencesOfString:@"." withString:@","]:@"—";
     if([tempo hasSuffix:@",0"])tempo=[tempo substringToIndex:tempo.length-2];

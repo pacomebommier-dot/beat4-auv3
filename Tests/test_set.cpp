@@ -17,7 +17,7 @@ int main(){
  s.play(h,m);assert(s.queuedPosition==6);s.play(h,m);assert(s.queuedPosition==6);
  assert(s.program.selected==9);s.play(h,m);assert(s.queuedPosition==6);
  h.beat=8;h.barStart=8;s.advance(h,m);assert(s.cursor==6);
- s.play(h,m);assert(s.queuedPosition==-1); // terminal no loop
+ s.play(h,m);assert(s.queuedPosition==6&&s.program.selected==9); // replay the terminal occurrence without wrapping
  h.beat=12;h.barStart=12;s.advance(h,m);s.reset();s.play(h,m);assert(s.queuedPosition==1);
  s.stop();assert(s.program.selected==-1 && s.cursor==1);
  h.beat=16;h.barStart=16;assert(s.advance(h,m).activated<0);

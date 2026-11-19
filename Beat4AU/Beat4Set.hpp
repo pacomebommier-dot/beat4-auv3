@@ -58,7 +58,6 @@ struct SetEngine {
   if(base<0 || restartTerminal || (base>=last()&&(base>=kSetCount||slots[base]<0)))next=first();
   else {for(int i=base+1;i<kSetCount;++i)if(slots[i]>=0){next=i;break;}if(next<0)next=last();}
   restartTerminal=false;
-  if(program.selected<0&&activePosition==next&&program.active==slots[next])return {};
   return request(slots[next],RequestOrigin::Set,next,h,m);
  }
  void executed(ProgramAction a) noexcept {

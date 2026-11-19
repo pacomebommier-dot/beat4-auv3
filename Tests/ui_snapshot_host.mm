@@ -9,6 +9,7 @@
 
 @interface Beat4ViewController (SnapshotTest)
 - (void)updateDisplay:(CADisplayLink *)link;
+- (UIMenu *)padColorMenuForProgram:(NSInteger)pc;
 @end
 
 @interface SnapshotApp : UIResponder <UIApplicationDelegate>
@@ -363,6 +364,23 @@
   [unit savePadColor:@"orange" program:29];[vc updateDisplay:nil];
   CGFloat r=0,g=0,b=0,a=0;[[(UIButton*)grid[29] backgroundColor] getRed:&r green:&g blue:&b alpha:&a];
   assert(std::abs(r-232./255)<.01);
+  UIMenu *colorMenu=[vc padColorMenuForProgram:29];
+  assert(colorMenu.children.count==10);
+  for(NSUInteger i=0;i<8;++i){
+    UIAction *action=(UIAction *)colorMenu.children[i];
+    assert(action.image!=nil && action.state==(i==7?UIMenuElementStateOn:UIMenuElementStateOff));
+  }
+  UIButton *bpmControl=[vc valueForKey:@"bpmButton"];
+  [vc setValue:@YES forKey:@"bpmDragging"];
+  [vc setValue:@(unit.currentProgram) forKey:@"bpmDragProgram"];
+  [vc setValue:@128 forKey:@"bpmDragTarget"];
+  [vc updateDisplay:nil];
+  assert([bpmControl.currentTitleColor isEqual:UIColor.whiteColor]);
+  [vc setValue:@129 forKey:@"bpmDragTarget"];
+  [vc updateDisplay:nil];
+  assert(![bpmControl.currentTitleColor isEqual:UIColor.whiteColor]);
+  [vc setValue:@NO forKey:@"bpmDragging"];
+
   [vc performSelector:@selector(showConfigurationMenu:) withObject:nil];
   UIAlertController *menu=(UIAlertController*)vc.presentedViewController;
   assert([menu isKindOfClass:UIAlertController.class]&&menu.actions.count==4);
