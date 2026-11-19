@@ -130,6 +130,33 @@
    assert(!pad.hidden && pad.frame.size.height>=viewTitle.font.capHeight);
    assert(CGRectGetMinX(pad.frame)>=CGRectGetMaxX(viewTitle.frame));
   }
+  // The last two SET positions must be reachable and name the assigned PC,
+  // even while a different PC is active and another PC is queued.
+  UIButton *editor=[vc valueForKey:@"setEditButton"];
+  UIButton *songControl=[vc valueForKey:@"songButton"];
+  [editor sendActionsForControlEvents:UIControlEventTouchUpInside];
+  NSArray<UIButton*> *programPads=[vc valueForKey:@"pads"];
+  for(int index=8;index<10;++index){
+   UIButton *pad=mini[index];
+   CGPoint center=[pad convertPoint:CGPointMake(CGRectGetMidX(pad.bounds),CGRectGetMidY(pad.bounds)) toView:vc.view];
+   assert([vc.view hitTest:center withEvent:nil]==pad);
+   [pad sendActionsForControlEvents:UIControlEventTouchUpInside];
+   [programPads[index+6] sendActionsForControlEvents:UIControlEventTouchUpInside];
+   tick();[vc updateDisplay:nil];
+   NSArray *assigned=unit.setSnapshot[@"slots"];
+   assert([assigned[index] intValue]==index+6);
+   assert([songControl.currentTitle isEqualToString:@"UNKNOWN"]);
+   assert(unit.currentProgram==7 && [unit.transportSnapshot[@"selectedPC"] intValue]==39);
+   assert(messages.count==1);
+   NSString *name=[NSString stringWithFormat:@"Recette %d",index+1];
+   [unit saveSongTitle:name program:index+6];[vc updateDisplay:nil];
+   assert([songControl.currentTitle isEqualToString:name]);
+   assert([unit.currentSong[@"title"] isEqualToString:@"R10 NATIVE TEST"]);
+   [unit saveSongTitle:@"" program:index+6];
+   [unit assignSetPosition:index program:-1];tick();
+  }
+  [editor sendActionsForControlEvents:UIControlEventTouchUpInside];
+  [vc setValue:@0 forKey:@"page"];[vc updateDisplay:nil];
   AURenderEvent event{};event.head.eventType=AURenderEventMIDI;event.head.eventSampleTime=AUEventSampleTimeImmediate;
   event.MIDI.length=2;event.MIDI.data[0]=0xCF;event.MIDI.data[1]=103;input=&event;tick();
   assert(unit.currentProgram==7 && ![unit.transportSnapshot[@"uncertain"] boolValue] && messages.count==1);

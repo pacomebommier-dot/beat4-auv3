@@ -11,6 +11,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (NSInteger)currentProgram;
 - (NSDictionary<NSString *, id> *)currentSong;
 - (void)saveSongTitle:(NSString *)title;
+- (void)saveSongTitle:(NSString *)title program:(NSInteger)pg;
 - (void)saveSongBPM:(double)bpm;
 - (void)saveSongBPM:(double)bpm program:(NSInteger)pg;
 - (void)saveSongSubNote:(NSInteger)note;

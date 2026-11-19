@@ -174,7 +174,7 @@ static UIColor *circuitColor(NSInteger index){
     _logo.accessibilityLabel=@"BEAT//4, menu SONGS et SET";
     _logo.accessibilityTraits=UIAccessibilityTraitButton;
     [_logo addGestureRecognizer:[[UITapGestureRecognizer alloc]initWithTarget:self action:@selector(showConfigurationMenu:)]];
-    _versionLabel=[self makeLabel:[NSString stringWithFormat:@"v%@",[NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"0.5.22"] size:8 color:RGB(122,145,121)];
+    _versionLabel=[self makeLabel:[NSString stringWithFormat:@"v%@",[NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"0.5.23"] size:8 color:RGB(122,145,121)];
     _modeLabel=[self makeLabel:@"QUEUE" size:10 color:RGB(197,208,197)];
     _hostBPM=[self makeLabel:@"" size:12 color:RGB(145,148,145)];
     _host=[[Beat4TitleLabel alloc]init];_host.text=@"MÉTRONOME";
@@ -392,6 +392,12 @@ static UIColor *circuitColor(NSInteger index){
     const bool matches=host>0&&std::round(target)==std::round(host);
     [_bpmButton setTitleColor:beat4::validBPM(target)?(matches?UIColor.whiteColor:RGB(235,155,65)):RGB(110,120,111) forState:UIControlStateNormal];
 }
+- (NSInteger)songNameProgram {
+    if(!self.setEditing)return [self.unit currentProgram];
+    NSArray *slots=[self.unit setSnapshot][@"slots"];
+    const NSInteger position=self.setEditPosition;
+    return position>=0&&position<(NSInteger)slots.count?[slots[position] integerValue]:-1;
+}
 - (void)refreshSong {
     NSDictionary *state=self.frameSnapshot ?: [self.unit transportSnapshot];
     NSInteger pg=[state[@"pg"] integerValue];
@@ -405,8 +411,11 @@ static UIColor *circuitColor(NSInteger index){
     [self refreshRamp:pg song:song];
     _pgLabel.text=[NSString stringWithFormat:@"%@%@",active,pending];
     BOOL configured=pg>=0;
-    _noteButton.enabled=configured;_songButton.enabled=configured;_bpmButton.enabled=configured;
-    NSString *name=song[@"title"] ?: @"UNKNOWN";
+    _noteButton.enabled=configured;_bpmButton.enabled=configured;
+    const NSInteger nameProgram=[self songNameProgram];
+    _songButton.enabled=nameProgram>=0;
+    NSString *name=self.setEditing&&nameProgram<0?@"Choisir un PCh":
+        ([self.unit songForProgram:nameProgram][@"title"] ?: @"UNKNOWN");
     [_songButton setTitle:name forState:UIControlStateNormal];
     double bpm=[song[@"bpm"] doubleValue];
     if(!self.bpmDragging)[_bpmButton setTitle:bpm>=20?[NSString stringWithFormat:@"%.0f BPM",std::round(bpm)]:@"--- BPM" forState:UIControlStateNormal];
@@ -418,15 +427,16 @@ static UIColor *circuitColor(NSInteger index){
     [_kickButton setTitleColor:enabled?RGB(177,225,164):RGB(110,120,111) forState:UIControlStateNormal];
 }
 - (void)editSong:(id)sender {
-    (void)sender;if([self.unit currentProgram]<0)return;
-    UIAlertController *a=[UIAlertController alertControllerWithTitle:@"SONG NAME" message:@"Nom mémorisé pour ce PC" preferredStyle:UIAlertControllerStyleAlert];
-    NSString *name=[self.unit currentSong][@"title"];
+    (void)sender;const NSInteger pc=[self songNameProgram];if(pc<0)return;
+    UIAlertController *a=[UIAlertController alertControllerWithTitle:@"SONG NAME"
+        message:[NSString stringWithFormat:@"Nom mémorisé pour le PCh %02ld",(long)pc+1] preferredStyle:UIAlertControllerStyleAlert];
+    NSString *name=[self.unit songForProgram:pc][@"title"];
     [a addTextFieldWithConfigurationHandler:^(UITextField* field){field.text=[name isEqualToString:@"UNKNOWN"]?@"":name;
         field.placeholder=@"UNKNOWN";field.autocorrectionType=UITextAutocorrectionTypeNo;}];
     __weak Beat4ViewController *weakSelf = self;
     [a addAction:[UIAlertAction actionWithTitle:@"Annuler" style:UIAlertActionStyleCancel handler:nil]];
     [a addAction:[UIAlertAction actionWithTitle:@"Enregistrer" style:UIAlertActionStyleDefault handler:^(UIAlertAction* action){
-        (void)action;[weakSelf.unit saveSongTitle:a.textFields.firstObject.text ?: @""];[weakSelf refreshSong];
+        (void)action;[weakSelf.unit saveSongTitle:a.textFields.firstObject.text ?: @"" program:pc];[weakSelf refreshSong];
     }]];
     [self presentViewController:a animated:YES completion:nil];
 }
@@ -526,10 +536,10 @@ static UIColor *circuitColor(NSInteger index){
 }
 - (void)editSet:(id)sender {
     (void)sender;self.setEditing=!self.setEditing;self.setEditPosition=-1;
-    if(self.setEditing)self.page=1;[self refreshPage];
+    if(self.setEditing)self.page=1;[self refreshSong];[self refreshPage];
 }
 - (void)selectSetPad:(UIButton*)sender {
-    if(self.setEditing){self.setEditPosition=sender.tag;[self refreshPage];}
+    if(self.setEditing){self.setEditPosition=sender.tag;[self refreshSong];[self refreshPage];}
     else [self.unit selectSetPosition:sender.tag];
 }
 - (void)clearSetPad:(UILongPressGestureRecognizer*)gesture {

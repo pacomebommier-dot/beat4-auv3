@@ -660,10 +660,11 @@ Snapshot load(const State& s) noexcept {
 
     }
 }
-- (void)saveSongTitle:(NSString*)title {
+- (void)saveSongTitle:(NSString*)title { [self saveSongTitle:title program:[self currentProgram]]; }
+- (void)saveSongTitle:(NSString*)title program:(NSInteger)pg {
     @synchronized(self){
-    NSInteger pg=[self currentProgram];if(!beat4::validProgram((int)pg))return;
-    NSMutableDictionary *entry=[[self currentSong] mutableCopy];
+    if(pg<0||pg>=64)return;
+    NSMutableDictionary *entry=[[self songForProgram:pg] mutableCopy];
     NSString *clean=[[title stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] copy];
     entry[@"title"]=clean.length?clean:@"UNKNOWN";
     [self persistSong:entry program:pg];
