@@ -5,11 +5,11 @@ using namespace beat4;
 int main(){
  ProgramMemory m;
  int cases=0;
- for(int mask=0;mask<256;++mask)for(int position=-1;position<8;++position)
+ for(int mask=0;mask<(1<<kSetCount);++mask)for(int position=-1;position<kSetCount;++position)
  for(bool on:{false,true})for(bool moving:{false,true}){
   HostPosition h{true,moving,1,0,4,128};
   SetEngine s;
-  for(int i=0;i<8;++i)if(mask&(1<<i))s.assign(i,i%3);
+  for(int i=0;i<kSetCount;++i)if(mask&(1<<i))s.assign(i,i%3);
   s.on=on&&mask;s.cursor=position;s.reachedPosition=position;s.program.active=12;
   const auto slots=s.slots;const bool enabled=s.on;
   s.reset();

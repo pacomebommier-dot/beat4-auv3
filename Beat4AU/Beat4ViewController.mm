@@ -12,12 +12,36 @@
 #include "Beat4Transport.hpp"
 #include "Beat4BPMGesture.hpp"
 #include "Beat4Set.hpp"
+#include "Beat4Store.h"
+#include "Beat4Config.h"
 
 static UIColor *RGB(CGFloat r,CGFloat g,CGFloat b,CGFloat a=1){
     return [UIColor colorWithRed:r/255.0 green:g/255.0 blue:b/255.0 alpha:a];
 }
 static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     return [UIFont monospacedSystemFontOfSize:sz weight:w];
+}
+static NSInteger circuitColorIndex(NSInteger pc,NSString *overrideColor) {
+    if(overrideColor.length){
+        NSUInteger index=[beat4::rampPaletteNames() indexOfObject:overrideColor];
+        if(index!=NSNotFound)return (NSInteger)index;
+    }
+    switch(pc+1){
+    case 1:case 9:case 10:case 17:case 25:case 33:case 41:case 42:case 49:return 0;
+    case 6:case 27:case 31:return 1;
+    case 7:case 8:case 56:case 63:case 64:return 2;
+    case 16:case 18:case 26:return 3;
+    case 32:case 57:return 4;
+    case 40:return 5;
+    case 50:return 6;
+    case 11:return 7;
+    default:return -1;
+    }
+}
+static UIColor *circuitColor(NSInteger index){
+    static const int colors[][3]={{198,56,48},{195,162,34},{60,145,78},{187,75,128},
+        {65,106,197},{244,137,128},{100,242,135},{232,137,42}};
+    return RGB(colors[index][0],colors[index][1],colors[index][2]);
 }
 @interface Beat4Button : UIButton @end
 @implementation Beat4Button
@@ -47,7 +71,7 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     CFTimeInterval _lightTick;
 }
 @property(nonatomic,copy)NSDictionary<NSString*,NSNumber*> *snapshot;
-@property(nonatomic,assign)CGRect lightBounds;
+@property(nonatomic,assign)CGRect lightBounds,beatSquareBounds;
 @property(nonatomic,assign)BOOL showBars;
 - (BOOL)lightsAnimating;
 @end
@@ -63,14 +87,16 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     _snapshot=[snapshot copy];[self setNeedsDisplay];
 }
 - (void)drawRect:(CGRect)rect {
-    [RGB(7,9,8) setFill];UIRectFill(rect);if(!self.showBars)return;
+    [RGB(7,9,8) setFill];UIRectFill(rect);
     const auto layout=beat4::layoutFor(self.bounds.size.width,self.bounds.size.height);
     CGContextRef ctx=UIGraphicsGetCurrentContext();if(!ctx)return;
     for(int i=0;i<4;++i){
         const CGFloat energy=_lights.energy(i);
-        const CGRect r=CGRectMake(self.lightBounds.origin.x+i*(layout.barWidth+layout.barGap),
-            self.lightBounds.origin.y,layout.barWidth,self.lightBounds.size.height);
-        UIBezierPath *shape=[UIBezierPath bezierPathWithRoundedRect:r cornerRadius:layout.corner];
+        const CGFloat square=self.beatSquareBounds.size.height;
+        const CGRect r=self.showBars?CGRectMake(self.lightBounds.origin.x+i*(layout.barWidth+layout.barGap),
+            self.lightBounds.origin.y,layout.barWidth,self.lightBounds.size.height):
+            CGRectMake(self.beatSquareBounds.origin.x+i*(square+4),self.beatSquareBounds.origin.y,square,square);
+        UIBezierPath *shape=[UIBezierPath bezierPathWithRoundedRect:r cornerRadius:self.showBars?layout.corner:2];
         CGContextSaveGState(ctx);
         if(energy>.001)CGContextSetShadowWithColor(ctx,CGSizeZero,16*layout.scale,
             RGB(151,185,139,.35*energy).CGColor);
@@ -100,7 +126,9 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
 @property(nonatomic,strong)UIButton *kickButton,*noteButton,*songButton,*bpmButton;
 @property(nonatomic,strong)UIButton *playButton,*queueButton,*saveButton;
 @property(nonatomic,strong)UISegmentedControl *modeControl;
-@property(nonatomic,strong)UIButton *setButton,*setEditButton;
+@property(nonatomic,strong)UIButton *setButton,*setEditButton,*rampToggle,*rampDuration;
+@property(nonatomic,strong)UILabel *hostBPM;
+@property(nonatomic,assign)NSInteger shownRampProgram,shownRampBars;
 @property(nonatomic,strong)NSMutableArray<UIButton*> *setPads;
 @property(nonatomic,assign)BOOL setEditing;
 @property(nonatomic,assign)NSInteger setEditPosition;
@@ -146,16 +174,16 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     _logo.accessibilityLabel=@"BEAT//4, menu SONGS et SET";
     _logo.accessibilityTraits=UIAccessibilityTraitButton;
     [_logo addGestureRecognizer:[[UITapGestureRecognizer alloc]initWithTarget:self action:@selector(showConfigurationMenu:)]];
-    _versionLabel=[self makeLabel:[NSString stringWithFormat:@"v%@",[NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"0.5.17"] size:8 color:RGB(122,145,121)];
-    _modeLabel=[self makeLabel:@"TEMPO MODE" size:10 color:RGB(197,208,197)];
-    _pcModeLabel=[self makeLabel:@"" size:10 color:RGB(132,157,136)];
+    _versionLabel=[self makeLabel:[NSString stringWithFormat:@"v%@",[NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"0.5.18"] size:8 color:RGB(122,145,121)];
+    _modeLabel=[self makeLabel:@"QUEUE" size:10 color:RGB(197,208,197)];
+    _hostBPM=[self makeLabel:@"" size:12 color:RGB(145,148,145)];
     _host=[[Beat4TitleLabel alloc]init];_host.text=@"MÉTRONOME";
     _host.font=Mono(11);_host.textColor=RGB(144,161,140);[self.view addSubview:_host];
     _host.textAlignment=NSTextAlignmentLeft;
     _host.userInteractionEnabled=YES;_host.accessibilityTraits=UIAccessibilityTraitButton;
     [_host addGestureRecognizer:[[UITapGestureRecognizer alloc]initWithTarget:self action:@selector(nextView:)]];
     _setPads=[NSMutableArray new];
-    for(int i=0;i<8;++i){
+    for(int i=0;i<beat4::kSetCount;++i){
         UIButton *pad=[Beat4MiniButton buttonWithType:UIButtonTypeCustom];pad.tag=i;
         pad.titleLabel.font=Mono(8);pad.layer.cornerRadius=2;
         [pad addTarget:self action:@selector(selectSetPad:) forControlEvents:UIControlEventTouchUpInside];
@@ -209,15 +237,21 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
         [pad addGestureRecognizer:edit];
         [_pageRegion addSubview:pad];[_pads addObject:pad];
     }
-    _queueButton=[self makeButton:@"QUEUE —" size:10];
-    [_queueButton addTarget:self action:@selector(editQueue:) forControlEvents:UIControlEventTouchUpInside];
     _modeControl=[[UISegmentedControl alloc]initWithItems:@[@"16",@"32"]];
     _modeControl.selectedSegmentIndex=[[self.unit transportSnapshot][@"cycleSteps"] integerValue]==32?1:0;
     _modeControl.accessibilityLabel=@"Cycle Drum 1 : 16 ou 32 steps";
     [_modeControl addTarget:self action:@selector(modeChanged:) forControlEvents:UIControlEventValueChanged];
     [self.view addSubview:_modeControl];
+    _rampToggle=[self makeButton:@"RAMPE" size:10];
+    [_rampToggle addTarget:self action:@selector(toggleRamp:) forControlEvents:UIControlEventTouchUpInside];
+    _rampDuration=[self makeButton:@"—" size:10];_rampDuration.contentHorizontalAlignment=UIControlContentHorizontalAlignmentCenter;
+    _rampDuration.backgroundColor=RGB(190,234,178);_rampDuration.accessibilityLabel=@"Durée RAMPE";
+    [_rampDuration setTitleColor:RGB(19,27,18) forState:UIControlStateNormal];
+    _rampDuration.showsMenuAsPrimaryAction=YES;
+    self.shownRampProgram=-2;self.shownRampBars=-2;
     _saveButton=[self makeButton:@"SAVE" size:10];
-    [_saveButton addTarget:self action:@selector(saveMode:) forControlEvents:UIControlEventTouchUpInside];
+    [_saveButton setTitleColor:RGB(190,234,178) forState:UIControlStateNormal];
+    [_saveButton addTarget:self action:@selector(saveRamp:) forControlEvents:UIControlEventTouchUpInside];
     [self refreshSong];
 }
 - (void)viewDidLayoutSubviews {
@@ -227,7 +261,7 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     _logo.frame=frame(l.logo);_logo.font=Mono(l.logoSize,UIFontWeightSemibold);
     _versionLabel.frame=frame(l.version);_versionLabel.font=Mono(l.versionSize);
     _host.frame=frame(l.viewTitle);
-    for(int i=0;i<8;++i){_setPads[i].frame=frame(beat4::setPad(l,i));_setPads[i].titleLabel.font=Mono(MAX(6.,l.hostSize*.64));}
+    for(int i=0;i<beat4::kSetCount;++i){_setPads[i].frame=frame(beat4::setPad(l,i));_setPads[i].titleLabel.font=Mono(MAX(6.,l.hostSize*.64));}
     _setButton.frame=frame(l.setToggle);_setButton.titleLabel.font=Mono(MAX(9.,l.hostSize));
     _setEditButton.frame=frame(l.setEditor);_setEditButton.titleLabel.font=Mono(MAX(11.,l.hostSize));_host.font=Mono(l.hostSize);_host.hidden=NO;
     _pgLabel.frame=frame(l.status);_pgLabel.font=Mono(l.transportsInHeader?12*l.scale:14*l.scale);
@@ -255,14 +289,23 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     _playButton.frame=frame(l.toggle);_playButton.titleLabel.font=Mono((l.portrait?24:28)*l.scale);
     _pageRegion.frame=frame(l.bars);
     for(int i=0;i<32;++i)_pads[i].frame=frame(beat4::programPad({0,0,l.bars.w,l.bars.h},i));
-    _queueButton.frame=frame(l.queue);
-    _modeLabel.frame=frame(l.modeLabel);_modeLabel.font=Mono(l.modeSize);
-    _modeControl.frame=frame(l.modeControl);
+    const CGFloat liveSize=MAX(10,MIN(18,l.modeSize)),liveHeight=liveSize*1.25;
+    _hostBPM.font=Mono(liveSize);_hostBPM.frame=CGRectMake(l.bpm.x,l.bpm.y-liveHeight,l.bpm.w,liveHeight);
+    const CGFloat square=MAX(6,MIN(12,liveSize*.7));
+    self.canvas.beatSquareBounds=CGRectMake(l.bpm.x,l.bpm.y-liveHeight-square-3,4*square+12,square);
+    const CGFloat size=MAX(8,MIN(l.modeSize,(self.view.bounds.size.width-2*l.modeLabel.x)/29)),
+        height=MAX(l.modeControl.h,l.save.h),y=l.modeControl.y;
+    CGFloat x=l.modeLabel.x;
+    _modeLabel.frame=CGRectMake(x,y,3.65*size,height);_modeLabel.font=Mono(size);x+=3.65*size;
+    _modeControl.frame=CGRectMake(x,y+(height-1.7*size)/2,11*size,1.7*size);x+=12.3*size;
+    _rampToggle.frame=CGRectMake(x,y,3.85*size,height);x+=3.85*size;
+    _rampDuration.frame=CGRectMake(x,y+(height-1.5*size)/2,2.7*size,1.5*size);x+=3.55*size;
+    _rampDuration.layer.cornerRadius=.75*size;
+    _saveButton.frame=CGRectMake(x,y,2.8*size,height);
+    for(UIButton *button in @[_rampToggle,_rampDuration,_saveButton])button.titleLabel.font=Mono(size);
     _modeControl.selectedSegmentTintColor=RGB(190,234,178);
     [_modeControl setTitleTextAttributes:@{NSFontAttributeName:Mono(MAX(9.,l.modeSize)),NSForegroundColorAttributeName:RGB(228,235,220)} forState:UIControlStateNormal];
     [_modeControl setTitleTextAttributes:@{NSForegroundColorAttributeName:RGB(19,27,18)} forState:UIControlStateSelected];
-    _saveButton.frame=frame(l.save);_saveButton.titleLabel.font=Mono(l.modeSize);
-    _pcModeLabel.frame=frame(l.pcMode);_pcModeLabel.font=Mono(l.modeSize);
     [self refreshPage];
 }
 - (void)configureNoteMenu {
@@ -308,7 +351,7 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     NSDictionary *summary=[self.unit previewConfigurationData:data error:&error];
     if(!summary){[self configurationMessage:error.localizedDescription];return;}
     NSString *message=[NSString stringWithFormat:@"%@ SONG(S), %@. Les champs absents seront conservés. Aucun PLAY, STOP ou PC ne sera envoyé.",summary[@"songs"],[summary[@"set"] boolValue]?@"SET inclus":@"SET conservé"];
-    if([summary[@"unsupportedTempos"] intValue]>0)message=[message stringByAppendingFormat:@"\n%@ BPM seront mémorisés mais ne peuvent pas être transmis à AUM par le routage actuel (50–177 BPM).",summary[@"unsupportedTempos"]];
+    if([summary[@"unsupportedTempos"] intValue]>0)message=[message stringByAppendingFormat:@"\n%@ BPM seront mémorisés mais ne peuvent pas être transmis à AUM par le routage actuel (50–240 BPM).",summary[@"unsupportedTempos"]];
     UIAlertController *alert=[UIAlertController alertControllerWithTitle:@"Charger la configuration ?" message:message preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"Annuler" style:UIAlertActionStyleCancel handler:nil]];
     __weak Beat4ViewController *weakSelf=self;
@@ -355,10 +398,10 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     NSString *active=pg<0?@"ACTIVE —":[NSString stringWithFormat:@"ACTIVE PC %02ld%@",(long)pg+1,[state[@"estimated"] boolValue]?@" (estimé)":@""];
     NSString *pending=selected<0?@"":[NSString stringWithFormat:@" · SELECTED %02ld%@",(long)selected+1,[state[@"uncertain"] boolValue]?@" PHASE ?":@""];
     const int steps=[song[@"steps"] intValue]==32?32:16;
-    NSString *saved=[NSString stringWithFormat:@"ACTIF · %d STEPS",steps];
-    _modeControl.selectedSegmentIndex=[state[@"cycleSteps"] intValue]==32?1:0;
+    _modeControl.selectedSegmentIndex=steps==32?1:0;
+    _modeControl.enabled=pg>=0;
+    [self refreshRamp:pg song:song];
     _pgLabel.text=[NSString stringWithFormat:@"%@%@",active,pending];
-    _pcModeLabel.text=[saved stringByReplacingOccurrencesOfString:@" · " withString:@""];
     BOOL configured=pg>=0;
     _noteButton.enabled=configured;_songButton.enabled=configured;_bpmButton.enabled=configured;
     NSString *name=song[@"title"] ?: @"UNKNOWN";
@@ -419,8 +462,46 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
 }
 - (void)levelChanged:(UISlider*)sender {[self.unit setKickLevel:sender.value];}
 - (void)toggleTransport:(id)sender {(void)sender;[self.unit requestTransportToggle];}
-- (void)modeChanged:(UISegmentedControl*)sender {[self.unit setCycleSteps:sender.selectedSegmentIndex==1?32:16];}
-- (void)saveMode:(id)sender {(void)sender;[self.unit saveCurrentCycle];[self refreshSong];}
+- (void)modeChanged:(UISegmentedControl*)sender {
+    [self.unit saveCycleSteps:sender.selectedSegmentIndex==1?32:16 program:[self.unit currentProgram]];[self refreshSong];
+}
+- (void)refreshRamp:(NSInteger)pc song:(NSDictionary *)song {
+    NSDictionary *ramp=[self.unit rampForProgram:pc];
+    NSInteger bars=[ramp[@"bars"] integerValue];BOOL named=pc>=0&&beat4::namedSong(song);
+    BOOL enabled=named&&[ramp[@"enabled"] boolValue];
+    _rampToggle.enabled=named&&bars>=0;_rampDuration.enabled=named;_saveButton.enabled=named&&[ramp[@"temporary"] boolValue];
+    [_rampToggle setTitleColor:enabled?UIColor.whiteColor:RGB(137,145,138) forState:UIControlStateNormal];
+    [_rampToggle setTitleColor:RGB(137,145,138) forState:UIControlStateDisabled];
+    [_saveButton setTitleColor:RGB(86,100,83) forState:UIControlStateDisabled];
+    _rampDuration.backgroundColor=named?RGB(190,234,178):RGB(21,23,24);
+    [_rampDuration setTitleColor:RGB(228,235,220) forState:UIControlStateDisabled];
+    [_rampDuration setTitle:bars<0?@"—":[NSString stringWithFormat:@"%ld",(long)bars] forState:UIControlStateNormal];
+    if(self.shownRampProgram==pc&&self.shownRampBars==bars)return;
+    self.shownRampProgram=pc;self.shownRampBars=bars;
+    NSMutableArray<UIMenuElement *> *actions=[NSMutableArray new];
+    __weak Beat4ViewController *weakSelf=self;
+    for(NSInteger count=-1;count<=20;++count){
+        NSString *title=count<0?@"—":[NSString stringWithFormat:@"%ld",(long)count];
+        [actions addObject:[UIAction actionWithTitle:title image:nil identifier:nil discoverabilityTitle:nil attributes:0
+            state:count==bars?UIMenuElementStateOn:UIMenuElementStateOff handler:^(__kindof UIAction *action){
+                (void)action;Beat4ViewController *vc=weakSelf;if(!vc)return;
+                NSDictionary *current=[vc.unit rampForProgram:pc];
+                BOOL on=[current[@"enabled"] boolValue];
+                if([current[@"bars"] intValue]<0&&![[vc.unit songForProgram:pc][@"rampEnabled"] isEqual:@NO])
+                    on=!beat4::maskSong([vc.unit songForProgram:pc])&&![current[@"temporary"] boolValue];
+                [vc.unit previewRamp:count enabled:on program:pc apply:NO];[vc refreshSong];
+            }]];
+    }
+    _rampDuration.menu=[UIMenu menuWithTitle:@"RAMPE · Mesures" children:actions];
+}
+- (void)toggleRamp:(id)sender {
+    (void)sender;NSInteger pc=[self.unit currentProgram];NSDictionary *ramp=[self.unit rampForProgram:pc];
+    NSInteger bars=[ramp[@"bars"] integerValue];if(bars<0)return;
+    [self.unit previewRamp:bars enabled:![ramp[@"enabled"] boolValue] program:pc apply:YES];[self refreshSong];
+}
+- (void)saveRamp:(id)sender {
+    (void)sender;[self.unit saveRampForProgram:[self.unit currentProgram]];[self refreshSong];
+}
 - (void)nextView:(id)sender {
     (void)sender;self.page=beat4::nextPage((int)self.page,1);[self refreshPage];
 }
@@ -464,12 +545,33 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
 }
 - (void)editPadQueue:(UILongPressGestureRecognizer*)gesture {
     if(self.setEditing || gesture.state!=UIGestureRecognizerStateBegan)return;
-    self.editedPC=(self.page-1)*32+gesture.view.tag;[self editQueue:nil];
+    self.editedPC=(self.page-1)*32+gesture.view.tag;
+    const NSInteger pc=self.editedPC;
+    NSArray *labels=@[@"Rouge",@"Jaune moutarde",@"Vert foncé",@"Rose",@"Bleu",@"Saumon",@"Vert vif",@"Orange"];
+    NSDictionary *song=[self.unit songForProgram:pc];
+    NSString *title=[NSString stringWithFormat:@"Couleur · PCh %02ld%@",(long)pc+1,
+        beat4::namedSong(song)?[NSString stringWithFormat:@" · %@",song[@"title"]]:@""];
+    UIAlertController *menu=[UIAlertController alertControllerWithTitle:title message:nil preferredStyle:UIAlertControllerStyleAlert];
+    __weak Beat4ViewController *weakSelf=self;
+    for(NSUInteger i=0;i<labels.count;++i){
+        NSString *color=beat4::rampPaletteNames()[i];
+        [menu addAction:[UIAlertAction actionWithTitle:labels[i] style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){
+            (void)action;[weakSelf.unit savePadColor:color program:pc];[weakSelf refreshPage];
+        }]];
+    }
+    [menu addAction:[UIAlertAction actionWithTitle:@"Couleur par défaut" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){
+        (void)action;[weakSelf.unit savePadColor:@"" program:pc];[weakSelf refreshPage];
+    }]];
+    [menu addAction:[UIAlertAction actionWithTitle:@"Modifier QUEUE" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){
+        (void)action;weakSelf.editedPC=pc;[weakSelf editQueue:nil];
+    }]];
+    [menu addAction:[UIAlertAction actionWithTitle:@"Annuler" style:UIAlertActionStyleCancel handler:nil]];
+    [self presentViewController:menu animated:YES completion:nil];
 }
 - (void)editQueue:(id)sender {
     (void)sender;const NSInteger pc=self.editedPC;
     UIAlertController *a=[UIAlertController alertControllerWithTitle:[NSString stringWithFormat:@"QUEUE · SONG %02ld",(long)pc+1]
-        message:@"Le cycle du projet ACTIF détermine l’attente : 16 steps = 1 mesure, 32 = 2 mesures. Par défaut : 16. Tempo progressif dès la sélection."
+        message:@"Le cycle du projet ACTIF détermine l’attente : 16 steps = 1 mesure, 32 = 2 mesures. Par défaut : 16. La rampe démarre quand le projet devient actif."
         preferredStyle:UIAlertControllerStyleAlert];
     __weak Beat4ViewController *weakSelf=self;
     NSArray *titles=@[@"16 steps · 1 mesure",@"32 steps · 2 mesures"];
@@ -493,19 +595,26 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     int active=[state[@"pg"] intValue],selected=[state[@"selectedPC"] intValue];
     for(int i=0;i<32;++i){
         UIButton *pad=_pads[i];pad.hidden=self.page==0;int pc=((int)self.page-1)*32+i;
-        [pad setTitle:[NSString stringWithFormat:@"%02d",pc+1] forState:UIControlStateNormal];
         NSDictionary *song=[self.unit songForProgram:pc];NSString *name=song[@"title"];
-        const BOOL configured=(name.length>0&&![name isEqual:@"UNKNOWN"])||[song[@"bpm"] doubleValue]>=20||(song[@"sub"]&&[song[@"sub"] intValue]>=0);
-        pad.backgroundColor=pc==active?RGB(240,240,235):pc==selected?RGB(135,135,135):configured?RGB(27,50,35):RGB(25,29,26);
-        [pad setTitleColor:pc==active||pc==selected?RGB(10,12,10):RGB(190,196,187) forState:UIControlStateNormal];
-        pad.accessibilityLabel=[NSString stringWithFormat:@"SONG %02d %@",pc+1,pc==active?@"ACTIF":pc==selected?@"SÉLECTIONNÉ":configured?@"RENSEIGNÉ":@"ÉTEINT"];
+        const BOOL configured=beat4::namedSong(song);
+        NSString *overrideColor=song[@"padColor"];
+        const NSInteger color=(configured||overrideColor.length)?circuitColorIndex(pc,overrideColor):-1;
+        [pad setTitle:configured?name:[NSString stringWithFormat:@"%02d",pc+1] forState:UIControlStateNormal];
+        pad.titleLabel.adjustsFontSizeToFitWidth=YES;pad.titleLabel.minimumScaleFactor=.55;
+        pad.titleLabel.lineBreakMode=NSLineBreakByTruncatingTail;
+        const CGFloat font=MAX(9,MIN(15,pad.bounds.size.width*.30));pad.titleLabel.font=Mono(configured?.8*font:font);
+        pad.backgroundColor=color>=0?circuitColor(color):(configured?RGB(27,50,35):RGB(25,29,26));
+        [pad setTitleColor:color<0?RGB(190,196,187):(color==1||color>=5?RGB(16,16,16):UIColor.whiteColor) forState:UIControlStateNormal];
+        pad.layer.borderWidth=pc==active||pc==selected?2:0;
+        pad.layer.borderColor=(pc==active?UIColor.whiteColor:RGB(235,155,65)).CGColor;
+        pad.accessibilityLabel=[NSString stringWithFormat:@"PCh %02d %@ %@",pc+1,configured?name:@"",pc==active?@"ACTIF":pc==selected?@"EN ATTENTE":@""];
     }
     NSDictionary *set=[self.unit setSnapshot];NSArray *slots=set[@"slots"];
     const int cursor=[set[@"cursor"] intValue];
     [_setButton setTitle:[set[@"on"] boolValue]?@"SET ON":@"SET OFF" forState:UIControlStateNormal];
     [_setButton setTitleColor:[set[@"on"] boolValue]?RGB(177,225,164):RGB(115,128,114) forState:UIControlStateNormal];
     [_setEditButton setTitleColor:self.setEditing?RGB(235,155,65):RGB(150,166,147) forState:UIControlStateNormal];
-    for(int i=0;i<8;++i){
+    for(int i=0;i<beat4::kSetCount;++i){
         UIButton *pad=_setPads[i];const int pc=[slots[i] intValue];
         const int occurrence=[set[@"activePosition"] intValue],queuedIndex=[set[@"queuedPosition"] intValue];
         const BOOL filled=pc>=0,lit=filled&&pc==active&&(occurrence<0||occurrence==i),queued=filled&&pc==selected&&(queuedIndex<0||queuedIndex==i);
@@ -517,10 +626,7 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
         pad.accessibilityLabel=[NSString stringWithFormat:@"SET %d, %@%@%@%@",i+1,
             filled?[NSString stringWithFormat:@"SONG %02d",pc+1]:@"vide",i==cursor?@", curseur":@"",lit?@", actif":@"",queued?@", queued":@""];
     }
-    _queueButton.hidden=self.page==0;
-    NSDictionary *entry=[self.unit songForProgram:self.editedPC];
-    NSString *queue=[entry[@"steps"] intValue]==32?@"32 STEPS":@"16 STEPS";
-    [_queueButton setTitle:[NSString stringWithFormat:@"SONG %02ld · Q %@",(long)self.editedPC+1,queue] forState:UIControlStateNormal];
+
 }
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
@@ -543,10 +649,17 @@ static UIFont *Mono(CGFloat sz,UIFontWeight w=UIFontWeightRegular){
     if(pg!=self.seenPG){self.seenPG=pg;[self refreshSong];}
     BOOL synced=[data[@"synced"] boolValue];
     BOOL moving=[data[@"moving"] boolValue];
-    [_playButton setTitle:moving?@"■":@"▶" forState:UIControlStateNormal];
+    BOOL setOn=[[self.unit setSnapshot][@"on"] boolValue];
+    [_playButton setTitle:moving&&!setOn?@"■":@"▶" forState:UIControlStateNormal];
+    _playButton.accessibilityLabel=moving?(setOn?@"SONG suivant, appui long pour arrêter":@"Arrêter"):@"Démarrer";
     [self refreshSong];[self refreshPage];
     double target=[[self.unit currentSong][@"bpm"] doubleValue];
-    [_bpmButton setTitleColor:beat4::validBPM(target)?(synced && std::abs(target-[data[@"bpm"] doubleValue])>.05?RGB(235,155,65):RGB(219,223,209)):RGB(110,120,111) forState:UIControlStateNormal];
+    const double host=[data[@"bpm"] doubleValue];
+    NSString *tempo=host>0?[[NSString stringWithFormat:@"%.1f",host] stringByReplacingOccurrencesOfString:@"." withString:@","]:@"—";
+    if([tempo hasSuffix:@",0"])tempo=[tempo substringToIndex:tempo.length-2];
+    _hostBPM.text=[NSString stringWithFormat:@"HOST %@ BPM",tempo];
+    const bool matches=host>0&&std::round(target*10)==std::round(host*10);
+    [_bpmButton setTitleColor:beat4::validBPM(target)?(matches?UIColor.whiteColor:RGB(235,155,65)):RGB(110,120,111) forState:UIControlStateNormal];
     BOOL enabled=[data[@"kickEnabled"] boolValue];
     [_kickButton setTitleColor:enabled?RGB(177,225,164):RGB(110,120,111) forState:UIControlStateNormal];
     if(!_levelSlider.tracking)_levelSlider.value=[data[@"kickLevel"] floatValue];

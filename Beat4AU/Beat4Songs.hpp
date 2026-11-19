@@ -14,6 +14,8 @@ struct Song {
     int subNote = -1; // pitch class 0=C ... 11=B; -1 = not configured
 };
 constexpr int kNumberOfPrograms = 128;
+constexpr int kSetCount = 10;
+constexpr double kTempoMin = 50, kTempoMax = 240;
 inline bool validProgram(int pg) noexcept {return pg >= 0 && pg < kNumberOfPrograms;}
 inline bool validBPM(double bpm) noexcept {return std::isfinite(bpm) && bpm >= 20 && bpm <= 240;}
 inline bool validSub(int pitchClass) noexcept {return pitchClass >= 0 && pitchClass < 12;}
@@ -26,12 +28,10 @@ inline double subFrequency(int pitchClass) noexcept {
     if (!validSub(pitchClass)) return 43.653528929; // neutral sound until song known
     return 440.0 * std::pow(2.0, (24 + pitchClass - 69.0) / 12.0);
 }
-// AUM: CC118, channel 15, absolute range 50..177 BPM (one BPM per value).
-// The repertoire uses 50..170; 171..177 completes the 128-value MIDI range.
-// Keep legacy song storage intact, but never wrap or clamp an unsupported tempo.
+// AUM CC118 (channel 15): configure its absolute range to 50–240 BPM.
 inline int tempoCC7(double bpm) noexcept {
-    if (!std::isfinite(bpm) || bpm < 50 || bpm > 177) return -1;
-    return static_cast<int>(std::lround(bpm)) - 50;
+    if (!std::isfinite(bpm) || bpm < kTempoMin || bpm > kTempoMax) return -1;
+    return static_cast<int>(std::lround((bpm-kTempoMin)*127/(kTempoMax-kTempoMin)));
 }
 inline bool isCircuitProgramChange(uint8_t status, uint8_t program, int &pg) noexcept {
     if (status != 0xCF || program > 127) return false; // channel 16 only

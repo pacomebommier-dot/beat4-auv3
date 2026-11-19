@@ -3,7 +3,7 @@
 #include <iostream>
 using namespace beat4;
 int main(){
- ProgramMemory m; m.bpm[3]=117; HostPosition h{true,false,0,0,4,128};
+ ProgramMemory m; m.bpm[3]=117;m.rampBars[3]=4; HostPosition h{true,false,0,0,4,128};
  SetEngine s; s.assign(1,3);s.assign(3,7);s.assign(5,3);s.assign(6,9);s.enable(true,h);
  auto a=s.play(h,m);assert(a.activated==3 && a.tempo==117 && s.cursor==1);
  h.moving=true;h.beat=1;s.advance(h,m);
@@ -17,7 +17,7 @@ int main(){
  s.play(h,m);assert(s.queuedPosition==6);s.play(h,m);assert(s.queuedPosition==6);
  assert(s.program.selected==9);s.play(h,m);assert(s.queuedPosition==6);
  h.beat=8;h.barStart=8;s.advance(h,m);assert(s.cursor==6);
- s.play(h,m);assert(s.queuedPosition==6); // terminal no loop
+ s.play(h,m);assert(s.queuedPosition==-1); // terminal no loop
  h.beat=12;h.barStart=12;s.advance(h,m);s.reset();s.play(h,m);assert(s.queuedPosition==1);
  s.stop();assert(s.program.selected==-1 && s.cursor==1);
  h.beat=16;h.barStart=16;assert(s.advance(h,m).activated<0);
@@ -25,7 +25,7 @@ int main(){
  s.pad(3,h,m);s.assign(3,-1);assert(s.cursor==3 && s.program.selected==7);
  s.enable(false,h);assert(s.program.selected==7); // OFF preserves queue
  s.advance({true,true,20,20,4,128},m);assert(s.program.active==7);
- for(int i=0;i<8;++i){s.assign(i,-1);}assert(!s.on);
+ for(int i=0;i<kSetCount;++i){s.assign(i,-1);}assert(!s.on);
  // External recall does not erase the reached terminal for RESET.
  SetEngine resetAfterExternal;resetAfterExternal.assign(0,3);resetAfterExternal.assign(6,7);resetAfterExternal.on=true;
  resetAfterExternal.pad(6,{true,false,0,0,4,128},m);

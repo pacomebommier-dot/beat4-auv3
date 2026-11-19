@@ -5,6 +5,21 @@ namespace beat4 {
 inline double storedNumber(id value,double fallback=0){
  return [value isKindOfClass:NSNumber.class]?[(NSNumber*)value doubleValue]:fallback;
 }
+inline bool namedSong(NSDictionary *song){
+ NSString *name=[song[@"title"] stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+ return name.length&&[name caseInsensitiveCompare:@"UNKNOWN"]!=NSOrderedSame;
+}
+inline bool maskSong(NSDictionary *song){
+ NSString *name=song[@"title"];
+ return name.length&&[name caseInsensitiveCompare:@"Mask"]==NSOrderedSame;
+}
+inline int songRampBars(NSDictionary *song){
+ return song[@"rampBars"]?(int)storedNumber(song[@"rampBars"],-1):(namedSong(song)&&!maskSong(song)?4:-1);
+}
+inline bool songRampEnabled(NSDictionary *song){
+ return namedSong(song)&&songRampBars(song)>=0&&(song[@"rampEnabled"]?[song[@"rampEnabled"] boolValue]:!maskSong(song));
+}
+inline int songTempoRamp(NSDictionary *song){return songRampEnabled(song)?songRampBars(song):-1;}
 inline NSMutableDictionary *loadSongStore(NSUserDefaults *defaults){
  NSDictionary *saved=[defaults dictionaryForKey:@"beat4.songs.v2"];
  if(!saved)saved=[defaults dictionaryForKey:@"beat4.songs.v1"];
@@ -16,11 +31,14 @@ inline NSMutableDictionary *loadSongStore(NSUserDefaults *defaults){
   if(pc<0 || pc>=64 || ![key isEqualToString:[NSString stringWithFormat:@"%d",pc]])return;
   NSDictionary *entry=value;
   int sub=(int)storedNumber(entry[@"sub"],-1);
-  result[key]=@{@"title":[entry[@"title"] isKindOfClass:NSString.class]?entry[@"title"]:@"UNKNOWN",
+  NSMutableDictionary *song=[@{@"title":[entry[@"title"] isKindOfClass:NSString.class]?entry[@"title"]:@"UNKNOWN",
     @"bpm":@(storedBPM(storedNumber(entry[@"bpm"]))),@"sub":@(validSub(sub)?sub:-1),
     @"steps":@(storedNumber(entry[@"steps"],16)==32?32:16),
     @"queue":@(storedQueue((int)storedNumber(entry[@"queue"]))),
-    @"pcMode":@(storedMode((int)storedNumber(entry[@"pcMode"],-1)))};
+    @"pcMode":@(storedMode((int)storedNumber(entry[@"pcMode"],-1)))} mutableCopy];
+  for(NSString *field in @[@"rampBars",@"rampEnabled"])if([entry[field] isKindOfClass:NSNumber.class])song[field]=entry[field];
+  if([entry[@"padColor"] isKindOfClass:NSString.class])song[@"padColor"]=entry[@"padColor"];
+  result[key]=song;
  }];return result;
 }
 inline void writeSongStore(NSUserDefaults *defaults,NSDictionary *songs){

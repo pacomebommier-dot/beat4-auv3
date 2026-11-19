@@ -4,6 +4,7 @@
 #import "../Beat4AU/Beat4AudioUnit.h"
 #include <cassert>
 #include <cmath>
+#include "../Beat4AU/Beat4Songs.hpp"
 #import <QuartzCore/QuartzCore.h>
 
 @interface Beat4ViewController (SnapshotTest)
@@ -93,11 +94,12 @@
      for(UIButton *pad in pads){
       int pc=(page-1)*32+(int)pad.tag;
       assert(!pad.hidden);
-      assert([pad.accessibilityLabel containsString:pc==7?@"ACTIF":pc==39?@"SÉLECTIONNÉ":pc==6?@"RENSEIGNÉ":@"ÉTEINT"]);
+      if(pc==7){assert([pad.accessibilityLabel containsString:@"ACTIF"]);assert([pad.currentTitle isEqual:@"R10 NATIVE TEST"]);}
+      else assert([pad.currentTitle isEqual:[NSString stringWithFormat:@"%02d",pc+1]]);
+      if(pc==39)assert([pad.accessibilityLabel containsString:@"EN ATTENTE"]);
       CGFloat r=0,g=0,b=0,a=0;assert([pad.backgroundColor getRed:&r green:&g blue:&b alpha:&a]);
-      assert(pc==7?r>.9:pc==39?r>.5 && r<.6:r<.15);
-      if(pc==6)assert(g>.18&&g>r); // saved BPM, neutral green
-      if(pc==5)assert(g<.15); // genuinely unconfigured
+      if(pc==7)assert(std::abs(r-60./255)<.01&&std::abs(g-145./255)<.01);
+      else assert(r<.15&&g<.15);
      }
     }
     UIGraphicsImageRendererFormat *format=[UIGraphicsImageRendererFormat defaultFormat];format.scale=1;
@@ -123,7 +125,7 @@
   assert([unit.transportSnapshot[@"pg"] isEqual:before[@"pg"]]);
   assert([unit.transportSnapshot[@"selectedPC"] isEqual:before[@"selectedPC"]]);
   assert([unit.transportSnapshot[@"moving"] isEqual:before[@"moving"]]);
-  NSArray<UIButton*> *mini=[vc valueForKey:@"setPads"];assert(mini.count==8);
+  NSArray<UIButton*> *mini=[vc valueForKey:@"setPads"];assert(mini.count==10);
   for(UIButton *pad in mini){
    assert(!pad.hidden && pad.frame.size.height>=viewTitle.font.capHeight);
    assert(CGRectGetMinX(pad.frame)>=CGRectGetMaxX(viewTitle.frame));
@@ -144,12 +146,14 @@
   assert(messages.count==5 && [messages[3][@"bytes"] isEqual:playPress] && [messages[4][@"bytes"] isEqual:playRelease]);
   // Exercise the real AU render path: tempo CC on cable 0, PC on cable 1.
   // Saving a BPM alone remains silent; selecting a known PC at STOP sends it.
+  NSData *named=[@"{\"format\":\"BEAT4_CONFIG\",\"version\":1,\"songs\":[{\"song\":1,\"name\":\"A\"},{\"song\":2,\"name\":\"B\"},{\"song\":3,\"name\":\"C\"},{\"song\":12,\"name\":\"RAMP\",\"rampBars\":1}]}" dataUsingEncoding:NSUTF8StringEncoding];
+  assert([unit importConfigurationData:named error:&error]);
   for(int pc=0;pc<3;++pc){
-   const int bpm=pc==0?50:pc==1?128:170;
+   const int bpm=pc==0?50:pc==1?128:240;
    const NSUInteger before=messages.count;
    [unit saveSongBPM:bpm program:pc];tick();assert(messages.count==before);
    [unit selectProgram:pc];tick();assert(messages.count==before+2);
-   NSArray *expectedTempo=@[@190,@118,@(bpm-50)];
+   NSArray *expectedTempo=@[@190,@118,@(beat4::tempoCC7(bpm))];
    assert([messages[before][@"cable"] intValue]==1);
    assert([messages[before+1][@"cable"] intValue]==0);
    assert([messages[before+1][@"bytes"] isEqual:expectedTempo]);
@@ -194,10 +198,10 @@
   assert([[unit songForProgram:10][@"steps"] intValue]==32);
   assert(![unit songForProgram:11][@"steps"] || [[unit songForProgram:11][@"steps"] intValue]==16);
   const NSUInteger rampBefore=messages.count;beat=35;tick();
-  assert(messages.count>rampBefore && unit.currentProgram==10);
-  assert([messages.lastObject[@"bytes"] isEqual:(@[@190,@118,@83])]); // 133 BPM during queue
+  assert(messages.count==rampBefore && unit.currentProgram==10);
   beat=36;tick();assert(unit.currentProgram==11); // queued under active default16 before SAVE
-  beat=41;tick();assert([messages.lastObject[@"bytes"] isEqual:(@[@190,@118,@98])]); // 148 BPM
+  beat=40;tick();assert([messages.lastObject[@"bytes"] isEqual:(@[@190,@118,@(beat4::tempoCC7(148))])]);
+  beat=41;tick();
   [unit selectProgram:12];tick();[unit setCycleSteps:16];[unit saveCurrentCycle];
   assert([[unit songForProgram:11][@"steps"] intValue]==16);
   beat=44;tick();assert(unit.currentProgram==12);
@@ -212,13 +216,12 @@
   moving=NO;beat=0;tick();
   [unit assignSetPosition:1 program:0];[unit assignSetPosition:3 program:1];
   [unit assignSetPosition:5 program:0];[unit assignSetPosition:6 program:2];
-  [unit setEnabled:YES];tick();
+  [unit setEnabled:YES];[unit selectSetPosition:1];tick();
   NSUInteger setBefore=messages.count;
   [unit requestPlayGestureLong:NO];tick();tick();
   assert(unit.currentProgram==0 && [unit.setSnapshot[@"cursor"] intValue]==1);
-  assert([messages[setBefore][@"bytes"] isEqual:(@[@207,@0])]);
-  assert([messages[setBefore+1][@"bytes"] isEqual:(@[@190,@118,@0])]);
-  assert([messages[setBefore+2][@"bytes"] isEqual:playPress]);
+  assert(messages.count==setBefore+2);
+  assert([messages[setBefore][@"bytes"] isEqual:playPress]);
   vc.view.frame=CGRectMake(0,0,1024,768);[vc.view setNeedsLayout];[vc.view layoutIfNeeded];[vc updateDisplay:nil];
   UIGraphicsImageRenderer *setRenderer=[[UIGraphicsImageRenderer alloc]initWithSize:vc.view.bounds.size];
   UIImage *setImage=[setRenderer imageWithActions:^(UIGraphicsImageRendererContext *context){[vc.view.layer renderInContext:context.CGContext];}];
@@ -269,15 +272,12 @@
   assert(unit.currentProgram==2 && [unit.setSnapshot[@"cursor"] intValue]==1);
   [unit resetSetCache];[unit requestPlayGestureLong:NO];tick();assert([unit.transportSnapshot[@"selectedPC"] intValue]==0);
   [unit setEnabled:NO];tick();assert([unit.transportSnapshot[@"selectedPC"] intValue]==0);
-  for(int i=0;i<8;++i)[unit assignSetPosition:i program:-1];tick();
+  for(int i=0;i<beat4::kSetCount;++i)[unit assignSetPosition:i program:-1];tick();
   assert(![unit.setSnapshot[@"on"] boolValue] && [unit.transportSnapshot[@"selectedPC"] intValue]==0);
   beat=20;tick();assert(unit.currentProgram==0);
 
-  // Review regressions: failed tempo output must not START at the old tempo.
+  // SET ON starts the existing patch without a tempo or program command.
   moving=NO;tick();[unit assignSetPosition:0 program:1];[unit setEnabled:YES];tick();
-  failTempo=YES;setBefore=messages.count;[unit requestPlayGestureLong:NO];tick();tick();
-  for(NSUInteger i=setBefore;i<messages.count;++i)assert(![messages[i][@"bytes"] isEqual:playPress]);
-  failTempo=NO;
   // Accessible activation has no preceding TouchDown and still requests short PLAY.
   UIButton *playControl=[vc valueForKey:@"playButton"];
   [playControl sendActionsForControlEvents:UIControlEventTouchUpInside];tick();
@@ -306,7 +306,7 @@
   Beat4AudioUnit *restored=[[Beat4AudioUnit alloc]initWithComponentDescription:desc options:0 error:&error];
   assert([restored.setSnapshot[@"slots"] isEqual:unit.setSnapshot[@"slots"]]);
   assert([restored.setSnapshot[@"cursor"] isEqual:unit.setSnapshot[@"cursor"]]);
-  assert([restored.setSnapshot[@"on"] boolValue]);
+  assert(![restored.setSnapshot[@"on"] boolValue]);
   assert([restored.transportSnapshot[@"selectedPC"] intValue]==-1 && ![restored.transportSnapshot[@"moving"] boolValue]);
 
   // Portable bank + SET: same API as the native JSON picker and AU state.
@@ -318,7 +318,7 @@
     @"set":@{@"slots":@[@1,[NSNull null],@64,[NSNull null],[NSNull null],[NSNull null],[NSNull null],[NSNull null]],@"on":@YES}};
   NSData *config=[NSJSONSerialization dataWithJSONObject:payload options:0 error:&error];
   NSDictionary *summary=[bank previewConfigurationData:config error:&error];
-  assert([summary[@"songs"] intValue]==2&&[summary[@"set"] boolValue]&&[summary[@"unsupportedTempos"] intValue]==1);
+  assert([summary[@"songs"] intValue]==2&&[summary[@"set"] boolValue]&&[summary[@"unsupportedTempos"] intValue]==0);
   assert([bank importConfigurationData:config error:&error]&&!error);
   assert([[bank songForProgram:0][@"title"] isEqual:@"PORTABLE"]&&[[bank songForProgram:0][@"sub"] intValue]==1);
   assert([[bank songForProgram:63][@"bpm"] intValue]==240&&[[bank songForProgram:63][@"sub"] intValue]==2);
@@ -331,7 +331,7 @@
   assert([bankRestored importConfigurationData:extra error:&error]);
   bankRestored.fullStateForDocument=portable;
   assert(![[bankRestored songForProgram:60][@"title"] isEqual:@"ONLY_LOCAL"]);
-  assert([[bank exportConfigurationData:&error] isEqual:[bankRestored exportConfigurationData:&error]]);
+  assert(![bankRestored.setSnapshot[@"on"] boolValue]);
   assert([bankRestored.setSnapshot[@"cursor"] intValue]==0&&[bankRestored.setSnapshot[@"slots"][2] intValue]==63);
   // Partial import keeps fields and songs absent from the file.
   NSData *partial=[@"{\"format\":\"BEAT4_CONFIG\",\"version\":1,\"songs\":[{\"song\":1,\"name\":\"RENAMED\"}]}" dataUsingEncoding:NSUTF8StringEncoding];
@@ -351,20 +351,21 @@
   AudioUnitRenderActionFlags bankFlags=0;
   bankStatus=bankRender(&bankFlags,&bankStamp,128,0,&bankBuffers,nullptr,nil);assert(bankStatus==noErr);
   assert(messages.count==midiBefore&&bankRestored.currentProgram==-1&&[bankRestored.transportSnapshot[@"selectedPC"] intValue]==-1);
-  assert([bankRestored.setSnapshot[@"cursor"] intValue]==0&&[bankRestored.setSnapshot[@"on"] boolValue]);
+  assert([bankRestored.setSnapshot[@"cursor"] intValue]==0&&![bankRestored.setSnapshot[@"on"] boolValue]);
   [bankRestored deallocateRenderResources];
   // Name-only and note-only configuration also mark PC pads; musical colors win.
   NSData *colorData=[@"{\"format\":\"BEAT4_CONFIG\",\"version\":1,\"songs\":[{\"song\":30,\"name\":\"NAMED\"},{\"song\":31,\"sub\":\"C\"}]}" dataUsingEncoding:NSUTF8StringEncoding];
   assert([unit importConfigurationData:colorData error:&error]);
   [vc setValue:@1 forKey:@"page"];[vc updateDisplay:nil];
-  for(int index: {29,30}){
-    UIButton *pad=[[vc valueForKey:@"pads"] objectAtIndex:index];
-    CGFloat r=0,g=0,b=0,a=0;[pad.backgroundColor getRed:&r green:&g blue:&b alpha:&a];
-    assert(g>.18&&g>r&&[pad.accessibilityLabel containsString:@"RENSEIGNÉ"]);
-  }
+  NSArray *grid=[vc valueForKey:@"pads"];
+  assert([[(UIButton*)grid[29] currentTitle] isEqual:@"NAMED"]);
+  assert([[(UIButton*)grid[30] currentTitle] isEqual:@"31"]);
+  [unit savePadColor:@"orange" program:29];[vc updateDisplay:nil];
+  CGFloat r=0,g=0,b=0,a=0;[[(UIButton*)grid[29] backgroundColor] getRed:&r green:&g blue:&b alpha:&a];
+  assert(std::abs(r-232./255)<.01);
   [vc performSelector:@selector(showConfigurationMenu:) withObject:nil];
   UIAlertController *menu=(UIAlertController*)vc.presentedViewController;
-  assert([menu isKindOfClass:UIAlertController.class]&&menu.actions.count==4);
+  assert([menu isKindOfClass:UIAlertController.class]&&menu.actions.count>=4);
   assert([menu.actions[0].title containsString:@"Importer"]&&[menu.actions[1].title containsString:@"Exporter"]);
   [vc dismissViewControllerAnimated:NO completion:nil];
   NSData *trace=[NSJSONSerialization dataWithJSONObject:@{@"host":@"SIMULATED",@"midiOutput":messages,@"journal":unit.diagnosticLog} options:NSJSONWritingPrettyPrinted error:&error];

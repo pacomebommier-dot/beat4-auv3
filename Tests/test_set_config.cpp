@@ -5,7 +5,7 @@ using namespace beat4;
 int main(){
  ProgramMemory m;HostPosition stop{true,false,0,0,4,128},run{true,true,1,0,4,128};
  SetEngine s;s.assign(0,3);s.assign(5,7);s.on=true;s.pad(0,stop,m);s.pad(5,run,m);
- std::array<int,8> slots{{-1,9,-1,12,-1,-1,-1,-1}};
+ std::array<int,kSetCount> slots{{-1,9,-1,12,-1,-1,-1,-1,-1,-1}};
  s.configure(slots,true,1,true);
  assert(s.cursor==1&&s.on&&s.program.active==3&&s.program.selected==7);
  assert(s.queuedPosition==-1&&s.activePosition==-1);

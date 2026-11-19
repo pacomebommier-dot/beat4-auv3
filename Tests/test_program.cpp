@@ -15,11 +15,11 @@ int main(){
  boundary.beat=8;boundary.barStart=8;auto actions=order.renderStep(boundary,m,2);
  assert(actions[0].activated<0&&actions[1].activated<0&&order.selected==2&&order.active==0);
  assert(shouldEmitTempo({5,false,140},140));assert(!shouldEmitTempo({-1,false,140},140));
- assert(!shouldEmitTempo({-1,false,128.4},128.1)); // same transmitted integer, no CC flood
- assert(shouldEmitTempo({-1,false,128.5},128.4));
- assert(shouldEmitTempo({-1,false,128.49},128.5)); // descending ramp
+ assert(!shouldEmitTempo({-1,false,140.1},140)); // same transmitted integer, no CC flood
+ assert(shouldEmitTempo({-1,false,142},140));
+ assert(shouldEmitTempo({-1,false,140},142)); // descending ramp
  assert(shouldEmitTempo({5,false,128.1},128.4)); // new PC reasserts even the same CC
- assert(!shouldEmitTempo({5,false,240},128)); // outside the AUM mapping: no wrong tempo
+ assert(!shouldEmitTempo({5,false,241},128)); // outside the AUM mapping: no wrong tempo
  assert(!shouldEmitTempo({-1,false,0},128));
  ProgramEngine same;HostPosition stopped{true,false,0,0,4,128};same.request(7,false,false,stopped,m);
  stopped.moving=true;same.request(8,true,false,stopped,m);same.request(7,true,false,stopped,m);

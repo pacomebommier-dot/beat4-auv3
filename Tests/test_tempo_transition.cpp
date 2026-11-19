@@ -5,23 +5,25 @@
 using namespace beat4;
 static bool near(double a,double b){return std::abs(a-b)<1e-7;}
 int main(){
- // Large ramp starts while queued and survives the activation, with no jump.
- ProgramMemory m;m.bpm[1]=148;m.mode[1]=2;
+ // A queued target starts its ramp at activation.
+ ProgramMemory m;m.bpm[1]=148;m.mode[1]=2;m.rampBars[1]=2;
  ProgramEngine e;HostPosition h{true,false,0,0,4,128};e.request(0,false,false,h,m);
  h.moving=true;h.beat=1;e.advance(h,m);e.request(1,true,false,h,m);
- h.beat=3;assert(near(e.advance(h,m).tempo,133));
- h.beat=4;auto a=e.advance(h,m);assert(a.activated==1&&near(a.tempo,135.5));
- h.beat=9;assert(near(e.advance(h,m).tempo,148));
+ h.beat=3;assert(near(e.advance(h,m).tempo,0));
+ h.beat=4;auto a=e.advance(h,m);assert(a.activated==1&&near(a.tempo,128));
+ h.beat=12;assert(near(e.advance(h,m).tempo,148));
  // Immediate confirmation neither restarts a ramp nor echoes a PC.
  ProgramEngine c;h={true,true,1,0,4,128};c.request(1,false,true,h,m);
- h.beat=3;a=c.request(1,false,false,h,m);assert(a.activated==1&&!a.sendPC&&near(a.tempo,133));
- h.beat=5;assert(near(c.advance(h,m).tempo,138));
+ h.beat=3;a=c.request(1,false,false,h,m);assert(a.activated==1&&!a.sendPC&&near(a.tempo,128));
+ h.beat=7;assert(near(c.advance(h,m).tempo,141.75));
+ h.beat=8;a=c.request(1,false,false,h,m);assert(a.tempo==0&&!a.sendPC);
+ h.beat=11;assert(near(c.advance(h,m).tempo,148));
  // Threshold, immediate mode, falling tempo, and non-4/4 host bars.
  for(double target:{118.,138.,117.,139.}){
-  ProgramMemory mm;mm.bpm[1]=target;ProgramEngine x;
+  ProgramMemory mm;mm.bpm[1]=target;mm.rampBars[1]=2;ProgramEngine x;
   h={true,true,1,0,3,128};a=x.request(1,false,false,h,mm);assert(a.activated==1);
-  const double duration=std::abs(target-128)>10?6:3;
-  h.beat=1+duration/2;assert(near(x.advance(h,mm).tempo,(128+target)/2));
+  const double duration=6;
+  h.beat=1+duration/2;assert(near(x.advance(h,mm).tempo,128+(target-128)*.6875));
   h.beat=1+duration;assert(near(x.advance(h,mm).tempo,target));
  }
  // Recovery schedules from valid host timeline; new selection supersedes old.

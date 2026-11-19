@@ -23,21 +23,21 @@ struct PressRelease {
 // Render-thread owner. No secondary queue: ProgramEngine.selected is authoritative.
 struct SetEngine {
  ProgramEngine program;
- std::array<int,8> slots{{-1,-1,-1,-1,-1,-1,-1,-1}};
+ std::array<int,kSetCount> slots{{-1,-1,-1,-1,-1,-1,-1,-1,-1,-1}};
  bool on=false,restartTerminal=false;
  int cursor=-1,activePosition=-1,queuedPosition=-1,reachedPosition=-1;
  RequestOrigin origin=RequestOrigin::None;
  int beforeCursor=-1,beforeActive=-1,beforeQueued=-1,beforeReached=-1;
  RequestOrigin beforeOrigin=RequestOrigin::None;
- int first() const noexcept {for(int i=0;i<8;++i)if(slots[i]>=0)return i;return -1;}
- int last() const noexcept {for(int i=7;i>=0;--i)if(slots[i]>=0)return i;return -1;}
+ int first() const noexcept {for(int i=0;i<kSetCount;++i)if(slots[i]>=0)return i;return -1;}
+ int last() const noexcept {for(int i=kSetCount-1;i>=0;--i)if(slots[i]>=0)return i;return -1;}
  void assign(int index,int pc) noexcept {
-  if(index<0||index>=8||pc< -1||pc>=64)return;
+  if(index<0||index>=kSetCount||pc< -1||pc>=64)return;
   slots[index]=pc;if(first()<0)on=false;
  }
  void enable(bool value,const HostPosition& h) noexcept {
   if(value&&!on&&cursor<0&&h.moving)
-   for(int i=0;i<8;++i)if(slots[i]>=0&&slots[i]==program.active){cursor=i;activePosition=i;reachedPosition=i;break;}
+   for(int i=0;i<kSetCount;++i)if(slots[i]>=0&&slots[i]==program.active){cursor=i;activePosition=i;reachedPosition=i;break;}
   on=value&&first()>=0;
  }
  ProgramAction request(int pc,RequestOrigin source,int index,const HostPosition& h,const ProgramMemory& m) noexcept {
@@ -47,7 +47,7 @@ struct SetEngine {
   executed(a);return a;
  }
  ProgramAction pad(int index,const HostPosition& h,const ProgramMemory& m) noexcept {
-  if(index<0||index>=8||slots[index]<0)return {};
+  if(index<0||index>=kSetCount||slots[index]<0)return {};
   cursor=index;restartTerminal=false;
   return request(slots[index],RequestOrigin::Set,index,h,m);
  }
@@ -55,9 +55,10 @@ struct SetEngine {
   if(!on||first()<0)return {};
   int base=program.selected>=0&&origin==RequestOrigin::Set?queuedPosition:cursor;
   int next=-1;
-  if(base<0 || restartTerminal || (base>=last()&&(base>=8||slots[base]<0)))next=first();
-  else {for(int i=base+1;i<8;++i)if(slots[i]>=0){next=i;break;}if(next<0)next=last();}
+  if(base<0 || restartTerminal || (base>=last()&&(base>=kSetCount||slots[base]<0)))next=first();
+  else {for(int i=base+1;i<kSetCount;++i)if(slots[i]>=0){next=i;break;}if(next<0)next=last();}
   restartTerminal=false;
+  if(program.selected<0&&activePosition==next&&program.active==slots[next])return {};
   return request(slots[next],RequestOrigin::Set,next,h,m);
  }
  void executed(ProgramAction a) noexcept {
@@ -85,9 +86,9 @@ struct SetEngine {
  void stop() noexcept {program.cancel();queuedPosition=-1;origin=RequestOrigin::None;}
  // Legacy persisted name: restartTerminal now means restart at the first filled
  // occurrence after any RESET, not just after reaching the terminal pad.
- void configure(const std::array<int,8>& assignments,bool enabled,int position,bool restart) noexcept {
+ void configure(const std::array<int,kSetCount>& assignments,bool enabled,int position,bool restart) noexcept {
   slots=assignments;
-  cursor=first()<0?-1:(position==-1?-1:(position>=0&&position<8?position:first()));
+  cursor=first()<0?-1:(position==-1?-1:(position>=0&&position<kSetCount?position:first()));
   on=enabled&&first()>=0;restartTerminal=restart&&cursor>=0;
   activePosition=-1;reachedPosition=-1;
   // A queued SONG belongs to the old SET. Preserve its PC, not its old index.

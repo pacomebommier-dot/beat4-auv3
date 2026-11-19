@@ -29,6 +29,10 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)saveCurrentCycle;
 - (void)saveCycleSteps:(NSInteger)steps program:(NSInteger)pc;
 - (NSDictionary *)songForProgram:(NSInteger)pc;
+- (NSDictionary *)rampForProgram:(NSInteger)pc;
+- (void)previewRamp:(NSInteger)bars enabled:(BOOL)enabled program:(NSInteger)pc apply:(BOOL)apply;
+- (void)saveRampForProgram:(NSInteger)pc;
+- (void)savePadColor:(NSString *)color program:(NSInteger)pc;
 - (void)saveQueue:(NSInteger)beats program:(NSInteger)pc;
 @end
 NS_ASSUME_NONNULL_END

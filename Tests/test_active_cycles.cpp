@@ -35,10 +35,10 @@ int main(){
   e.request(1,true,false,host(6),m);assert(e.advance(host(8),m).activated==1);
  }
  // Tempo is independent of outgoing cycle duration and survives activation.
- {ProgramMemory m;m.bpm[1]=148;ProgramEngine e;start(e,m);
-  e.request(1,true,false,host(1),m);auto a=e.advance(host(3),m);assert(std::abs(a.tempo-133)<1e-7);
-  a=e.advance(host(4),m);assert(a.activated==1&&std::abs(a.tempo-135.5)<1e-7);
-  assert(std::abs(e.advance(host(9),m).tempo-148)<1e-7);
+ {ProgramMemory m;m.bpm[1]=148;m.rampBars[1]=2;ProgramEngine e;start(e,m);
+  e.request(1,true,false,host(1),m);auto a=e.advance(host(3),m);assert(a.tempo==0);
+  a=e.advance(host(4),m);assert(a.activated==1&&a.tempo==128);
+  assert(std::abs(e.advance(host(12),m).tempo-148)<1e-7);
  }
  // Missing host then recovery, seek, and failed MIDI output cannot deadlock/retry.
  {ProgramMemory m;m.steps[0]=32;ProgramEngine e;start(e,m);

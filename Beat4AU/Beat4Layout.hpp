@@ -1,4 +1,5 @@
 #pragma once
+#include "Beat4Songs.hpp"
 #include <algorithm>
 #include <cmath>
 namespace beat4 {
@@ -92,7 +93,7 @@ inline Layout layoutFor(double W,double H) noexcept {
  return l;
 }
 inline Rect setPad(const Layout& l,int index) noexcept {
- const double pitch=l.setStrip.w/8,gap=std::min(4.,pitch*.12);
+ const double pitch=l.setStrip.w/kSetCount,gap=std::min(4.,pitch*.12);
  return {l.setStrip.x+index*pitch,l.setStrip.y,pitch-gap,l.setStrip.h};
 }
 }

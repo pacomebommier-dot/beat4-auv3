@@ -38,20 +38,21 @@ struct State {
     std::array<std::atomic<double>,128> tempos;
     std::atomic<float> kickLevel{0.60f};
     std::atomic<bool> kickEnabled{false}; // OFF at first boot: no surprising audio.
-    std::array<std::atomic<int>,128> queues, cycleSteps;
+    std::array<std::atomic<int>,128> queues, cycleSteps, rampBars;
+    std::atomic<int> draftRamp{0};
     std::atomic<int> draftSteps{16}, localPC{-1}, selectedPC{-1}, transportRequest{-1};
     std::atomic<bool> uncertain{false},estimated{false};
     beat4::TransportPulse transportPulse;
     beat4::Journal journal;
     beat4::SetEngine set;
     beat4::ProgramEngine& engine=set.program; // render thread only
-    struct Command {int kind=0,index=0,value=0;std::array<int,8> slots{};uint64_t serial=0;};
+    struct Command {int kind=0,index=0,value=0;std::array<int,beat4::kSetCount> slots{};uint64_t serial=0;};
     std::mutex producerMutex; // Never acquired by the render thread.
     std::atomic<uint64_t> appliedConfiguration{0};
     std::array<Command,256> commands{};
     std::atomic<unsigned> readCommand{0},writeCommand{0};
     std::atomic<uint64_t> setPublished{0};
-    std::atomic<int> setActive{-1},setQueued{-1},setReached{-1};
+    std::atomic<int> setActive{-1},setQueued{-1},setReached{-1},setCursor{-1};
     beat4::PressRelease xone;
     double gestureClock=0;
     bool enqueue(int kind,int index=0,int value=0) noexcept {
@@ -60,7 +61,7 @@ struct State {
         if(next==readCommand.load(std::memory_order_acquire))return false;
         commands[w]={kind,index,value};writeCommand.store(next,std::memory_order_release);return true;
     }
-    bool enqueueConfiguration(const std::array<int,8>& slots,bool on,int cursor,bool restart,uint64_t serial) noexcept {
+    bool enqueueConfiguration(const std::array<int,beat4::kSetCount>& slots,bool on,int cursor,bool restart,uint64_t serial) noexcept {
         std::lock_guard<std::mutex> guard(producerMutex);
         const unsigned w=writeCommand.load(),next=(w+1)%commands.size();
         if(next==readCommand.load(std::memory_order_acquire))return false;
@@ -69,13 +70,14 @@ struct State {
         commands[w]=command;writeCommand.store(next,std::memory_order_release);return true;
     }
     uint64_t packedSet() const noexcept {
-        uint64_t bits=0;for(int i=0;i<8;++i)bits|=uint64_t(set.slots[i]+1)<<(7*i);
-        return bits|(uint64_t(set.cursor+1)<<56)|(uint64_t(set.on)<<60)|(uint64_t(set.restartTerminal)<<61);
+        uint64_t bits=0;
+        for(int i=beat4::kSetCount-1;i>=0;--i)bits=bits*65+uint64_t(set.slots[i]+1);
+        return bits|(uint64_t(set.on)<<61)|(uint64_t(set.restartTerminal)<<62);
     }
     beat4::ProgramMemory memories;
     double lastTempoSent=0;
     std::atomic<bool> midiOutputConfigured{false};
-    State() {for(int i=0;i<128;++i){notes[i].store(-1);tempos[i].store(0);queues[i].store(0);cycleSteps[i].store(16);}}
+    State() {for(int i=0;i<128;++i){notes[i].store(-1);tempos[i].store(0);queues[i].store(0);cycleSteps[i].store(16);rampBars[i].store(-1);}}
 };
 // Stable, realtime-readable callback slots. Host callbacks are installed during
 // allocateRenderResources, which can occur after internalRenderBlock is queried.
@@ -129,7 +131,7 @@ Snapshot load(const State& s) noexcept {
     AUMIDIOutputEventBlock _cachedMIDIOutput;
     dispatch_source_t _setPersistenceTimer;
     uint64_t _lastPersistedSet;
-    int _lastPersistedReached;
+    int _lastPersistedReached,_lastPersistedCursor;
     NSMutableDictionary<NSString*,NSDictionary*> *_songCache; // Protected by @synchronized(self), never used in render.
     NSDictionary *_pendingImportedSet;
     uint64_t _setImportSerial;
@@ -174,6 +176,10 @@ Snapshot load(const State& s) noexcept {
         return parameter.address==kLevel?s->kickLevel.load():(s->kickEnabled.load()?1.f:0.f);
     };
     _songCache=beat4::loadSongStore(NSUserDefaults.standardUserDefaults);
+    for(NSString *key in [_songCache.allKeys copy]){
+        NSDictionary *entry=_songCache[key];
+        if(beat4::maskSong(entry)){NSMutableDictionary *song=[entry mutableCopy];song[@"rampEnabled"]=@NO;_songCache[key]=song;}
+    }
     s->draftSteps.store(16);
     [_songCache enumerateKeysAndObjectsUsingBlock:^(NSString *key,NSDictionary *entry,BOOL *stop){
         (void)stop;const int pc=key.intValue;
@@ -181,18 +187,20 @@ Snapshot load(const State& s) noexcept {
         s->notes[pc].store([entry[@"sub"] intValue]);
         s->queues[pc].store([entry[@"queue"] intValue]);
         s->cycleSteps[pc].store([entry[@"steps"] intValue]==32?32:16);
+        s->rampBars[pc].store(beat4::songTempoRamp(entry));
     }];
     NSDictionary *savedSet=[NSUserDefaults.standardUserDefaults dictionaryForKey:@"beat4.set.v1"];
     NSArray *slots=savedSet[@"slots"];
-    if([slots isKindOfClass:NSArray.class] && slots.count==8){
-        for(int i=0;i<8;++i){const int pc=(int)beat4::storedNumber(slots[i],-1);s->set.assign(i,pc);}
+    if([slots isKindOfClass:NSArray.class] && (slots.count==8 || slots.count==beat4::kSetCount)){
+        for(int i=0;i<(int)slots.count;++i){const int pc=(int)beat4::storedNumber(slots[i],-1);s->set.assign(i,pc);}
         int cursor=(int)beat4::storedNumber(savedSet[@"cursor"],-1);
-        s->set.cursor=cursor>=0&&cursor<8?cursor:-1;
+        s->set.cursor=cursor>=0&&cursor<beat4::kSetCount?cursor:-1;
         s->set.reachedPosition=(int)beat4::storedNumber(savedSet[@"reachedPosition"],-1);
-        if(s->set.reachedPosition<0||s->set.reachedPosition>=8)s->set.reachedPosition=-1;
-        s->set.on=beat4::storedNumber(savedSet[@"on"])!=0&&s->set.first()>=0;
+        if(s->set.reachedPosition<0||s->set.reachedPosition>=beat4::kSetCount)s->set.reachedPosition=-1;
+        s->set.on=false;
         s->set.restartTerminal=beat4::storedNumber(savedSet[@"restart"])!=0;
     }
+    s->setCursor.store(s->set.cursor);_lastPersistedCursor=s->set.cursor;
     s->setPublished.store(s->packedSet());_lastPersistedSet=s->packedSet();
     s->setReached.store(s->set.reachedPosition);_lastPersistedReached=s->set.reachedPosition;
     __weak Beat4AudioUnit *weakSelf=self;
@@ -206,10 +214,11 @@ Snapshot load(const State& s) noexcept {
 - (void)persistSetSnapshot {
     const uint64_t bits=_state->setPublished.load();
     const int reached=_state->setReached.load();
-    if(bits==_lastPersistedSet&&reached==_lastPersistedReached)return;
+    const int cursor=_state->setCursor.load();
+    if(bits==_lastPersistedSet&&reached==_lastPersistedReached&&cursor==_lastPersistedCursor)return;
     NSDictionary *snapshot=[self setSnapshot];
     [NSUserDefaults.standardUserDefaults setObject:snapshot forKey:@"beat4.set.v1"];
-    _lastPersistedSet=bits;_lastPersistedReached=reached;
+    _lastPersistedSet=bits;_lastPersistedReached=reached;_lastPersistedCursor=cursor;
 }
 // Host installation is independent of editor visibility. Publish only off render.
 - (void)setTransportStateBlock:(AUHostTransportStateBlock)block {
@@ -313,7 +322,14 @@ Snapshot load(const State& s) noexcept {
             s->memories.bpm[i]=s->tempos[i].load();
             s->memories.queue[i]=s->queues[i].load();
             s->memories.steps[i]=s->cycleSteps[i].load();
+            s->memories.rampBars[i]=s->rampBars[i].load();
         }
+        auto loadRampDraft=[&]{
+            const int draft=s->draftRamp.load();
+            const int pc=(draft>>6)-1;
+            if(pc>=0&&pc==s->engine.active)s->memories.rampBars[pc]=(draft&1)?((draft&63)>>1)-1:-1;
+        };
+        loadRampDraft();
         int previousActive=s->engine.active;
         auto apply=[&](beat4::ProgramAction a){
             if(a.sendPC){
@@ -324,7 +340,14 @@ Snapshot load(const State& s) noexcept {
                 s->journal.write(status==noErr?4:6,a.activated,1,beat);
                 if(status!=noErr){s->set.outputFailed(previousActive,a.activated);return false;}
             }
-            if(a.activated>=0){s->journal.write(3,a.activated,a.sendPC?1:0,beat);previousActive=a.activated;}
+            if(a.activated>=0){
+                if(previousActive>=0&&previousActive!=a.activated){
+                    int draft=s->draftRamp.load();
+                    if((draft>>6)-1==previousActive)s->draftRamp.compare_exchange_strong(draft,0);
+                    s->memories.rampBars[previousActive]=s->rampBars[previousActive].load();
+                }
+                s->journal.write(3,a.activated,a.sendPC?1:0,beat);previousActive=a.activated;
+            }
             if(midiOut && beat4::shouldEmitTempo(a,s->lastTempoSent)){
                 auto message=beat4::tempoMessage(a.tempo);
                 if(message.length){
@@ -338,9 +361,9 @@ Snapshot load(const State& s) noexcept {
         };
         auto playGesture=[&](bool longPress){
             if(!s->set.on){s->transportPulse.request(moving);return;}
-            if(longPress){s->set.stop();s->transportPulse.receive(0xFC);return;}
-            const bool delivered=apply(s->set.play(position,s->memories));
-            if(delivered && !moving && s->engine.selected<0)s->transportPulse.receive(0xFA);
+            if(longPress){if(moving||s->transportPulse.awaitingTarget()==1){s->set.stop();s->transportPulse.receive(0xFC);}return;}
+            if(!moving){s->transportPulse.receive(0xFA);return;}
+            apply(s->set.play(position,s->memories));
         };
         for(const AURenderEvent *e=events;e!=nullptr;e=e->head.next){
             if(e->head.eventType==AURenderEventParameter || e->head.eventType==AURenderEventParameterRamp){
@@ -409,6 +432,14 @@ Snapshot load(const State& s) noexcept {
                 s->set.configure(command.slots,(command.value&1)!=0,command.index,(command.value&2)!=0);
                 appliedConfiguration=command.serial;
             }
+            else if(command.kind==7&&command.index==s->engine.active){
+                const int draft=s->draftRamp.load();
+                if(draft==command.value){
+                    loadRampDraft();
+                    if((draft&1)==0)s->engine.stopTempo();
+                    else if(moving)apply(s->engine.applyTempo(position,s->memories));
+                }
+            }
             r=(r+1)%s->commands.size();
         }
         s->readCommand.store(r,std::memory_order_release);
@@ -421,7 +452,8 @@ Snapshot load(const State& s) noexcept {
         if(request>=0)playGesture(false);
         s->setReached.store(s->set.reachedPosition);s->setActive.store(s->set.activePosition);s->setQueued.store(s->set.queuedPosition);
         const auto packed=s->packedSet();
-        if(packed!=s->setPublished.exchange(packed))s->revision.fetch_add(1);
+        const bool cursorChanged=s->set.cursor!=s->setCursor.exchange(s->set.cursor);
+        if(packed!=s->setPublished.exchange(packed)||cursorChanged)s->revision.fetch_add(1);
         if(appliedConfiguration)s->appliedConfiguration.store(appliedConfiguration,std::memory_order_release);
         if(midiOut){
             const auto message=s->transportPulse.next();
@@ -544,7 +576,7 @@ Snapshot load(const State& s) noexcept {
     @synchronized(self){
         NSDictionary *set=configuration[@"set"];
         if(set){
-            std::array<int,8> slots;for(int i=0;i<8;++i)slots[i]=[set[@"slots"][i] intValue];
+            std::array<int,beat4::kSetCount> slots;for(int i=0;i<beat4::kSetCount;++i)slots[i]=[set[@"slots"][i] intValue];
             const uint64_t serial=_setImportSerial+1;
             if(!_state->enqueueConfiguration(slots,[set[@"on"] boolValue],[set[@"cursor"] intValue],[set[@"restart"] boolValue],serial)){
                 beat4::configError(error,@"BEAT4 est occupé. Réessayez après le prochain buffer audio.");return NO;
@@ -553,6 +585,7 @@ Snapshot load(const State& s) noexcept {
             [NSUserDefaults.standardUserDefaults setObject:set forKey:@"beat4.set.v1"];
         }
         if(configuration[@"songs"]){
+            _state->draftRamp.store(0);
             _songCache=beat4::mergeSongPatches(replace?@{}:_songCache,configuration[@"songs"]);
             for(int pc=0;pc<64;++pc){
                 NSDictionary *entry=_songCache[[NSString stringWithFormat:@"%d",pc]];
@@ -560,6 +593,7 @@ Snapshot load(const State& s) noexcept {
                 _state->notes[pc].store(entry?[entry[@"sub"] intValue]:-1);
                 _state->queues[pc].store([entry[@"queue"] intValue]);
                 _state->cycleSteps[pc].store([entry[@"steps"] intValue]==32?32:16);
+                _state->rampBars[pc].store(beat4::songTempoRamp(entry));
             }
             beat4::writeSongStore(NSUserDefaults.standardUserDefaults,[_songCache copy]);
         }
@@ -585,6 +619,15 @@ Snapshot load(const State& s) noexcept {
         if(_state&&state[@"BEAT4ConfigurationJSON"]){
             id data=state[@"BEAT4ConfigurationJSON"];if(![data isKindOfClass:NSData.class])return;
             NSDictionary *config=beat4::parseConfigurationData(data,nil);if(!config)return;
+            if(config[@"set"]){
+                NSMutableDictionary *restored=[config mutableCopy],*set=[config[@"set"] mutableCopy];
+                set[@"on"]=@NO;restored[@"set"]=set;config=restored;
+            }
+            if(config[@"songs"]){
+                NSMutableDictionary *restored=[config mutableCopy],*songs=[config[@"songs"] mutableCopy];
+                for(NSString *key in songs.allKeys){if(beat4::maskSong(songs[key])){NSMutableDictionary *song=[songs[key] mutableCopy];song[@"rampEnabled"]=@NO;songs[key]=song;}}
+                restored[@"songs"]=songs;config=restored;
+            }
             if(![self applyConfiguration:config replaceSongs:[state[@"BEAT4ConfigurationMode"] isEqual:@"replace"] error:nil])return;
         }
         [super setFullState:state];
@@ -614,6 +657,7 @@ Snapshot load(const State& s) noexcept {
     _state->notes[pg].store(beat4::validSub((int)note)?(int)note:-1);
     _state->queues[pg].store([song[@"queue"] intValue]);
     _state->cycleSteps[pg].store([song[@"steps"] intValue]==32?32:16);
+    _state->rampBars[pg].store(beat4::songTempoRamp(song));
 
     }
 }
@@ -656,16 +700,17 @@ Snapshot load(const State& s) noexcept {
     }
 
     const uint64_t bits=_state->setPublished.load();NSMutableArray *slots=[NSMutableArray new];
-    for(int i=0;i<8;++i)[slots addObject:@((int)((bits>>(7*i))&127)-1)];
-    return @{@"slots":slots,@"cursor":@((int)((bits>>56)&15)-1),@"on":@((bits>>60)&1),@"restart":@((bits>>61)&1),@"reachedPosition":@(_state->setReached.load()),@"activePosition":@(_state->setActive.load()),@"queuedPosition":@(_state->setQueued.load())};
+    uint64_t encoded=bits&((uint64_t(1)<<61)-1);
+    for(int i=0;i<beat4::kSetCount;++i){[slots addObject:@((int)(encoded%65)-1)];encoded/=65;}
+    return @{@"slots":slots,@"cursor":@(_state->setCursor.load()),@"on":@((bits>>61)&1),@"restart":@((bits>>62)&1),@"reachedPosition":@(_state->setReached.load()),@"activePosition":@(_state->setActive.load()),@"queuedPosition":@(_state->setQueued.load())};
 
     }
 }
 - (void)setEnabled:(BOOL)enabled {_state->enqueue(1,0,enabled);}
 - (void)assignSetPosition:(NSInteger)index program:(NSInteger)pc {
-    if(index>=0&&index<8&&pc>=-1&&pc<64)_state->enqueue(2,(int)index,(int)pc);
+    if(index>=0&&index<beat4::kSetCount&&pc>=-1&&pc<64)_state->enqueue(2,(int)index,(int)pc);
 }
-- (void)selectSetPosition:(NSInteger)index {if(index>=0&&index<8)_state->enqueue(3,(int)index);}
+- (void)selectSetPosition:(NSInteger)index {if(index>=0&&index<beat4::kSetCount)_state->enqueue(3,(int)index);}
 - (void)requestPlayGestureLong:(BOOL)isLong {_state->enqueue(4,0,isLong);}
 - (void)resetSetCache {_state->enqueue(5);}
 - (void)selectProgram:(NSInteger)pc {if(pc>=0 && pc<64)_state->localPC.store((int)pc);}
@@ -690,6 +735,37 @@ Snapshot load(const State& s) noexcept {
     @synchronized(self){
     return _songCache[[NSString stringWithFormat:@"%ld",(long)pc]] ?: @{@"title":@"UNKNOWN",@"bpm":@0,@"sub":@(-1)};
 
+    }
+}
+- (NSDictionary *)rampForProgram:(NSInteger)pc {
+    NSDictionary *song=[self songForProgram:pc];
+    int draft=_state->draftRamp.load();
+    BOOL temporary=pc>=0&&(draft>>6)-1==pc;
+    return @{@"bars":@(temporary?((draft&63)>>1)-1:beat4::songRampBars(song)),
+        @"enabled":@(temporary?((draft&1)!=0):beat4::songRampEnabled(song)),@"temporary":@(temporary)};
+}
+- (void)previewRamp:(NSInteger)bars enabled:(BOOL)enabled program:(NSInteger)pc apply:(BOOL)apply {
+    if(pc<0||pc>=64||pc!=[self currentProgram]||bars< -1||bars>20||!beat4::namedSong([self songForProgram:pc]))return;
+    const int draft=((int)(pc+1)<<6)|((int)(bars+1)<<1)|(enabled&&bars>=0?1:0);
+    _state->draftRamp.store(draft);
+    if(apply||bars<0)_state->enqueue(7,(int)pc,draft);
+    _state->revision.fetch_add(1);
+}
+- (void)saveRampForProgram:(NSInteger)pc {
+    @synchronized(self){
+        int draft=_state->draftRamp.load();
+        if(pc<0||pc>=64||pc!=[self currentProgram]||(draft>>6)-1!=pc)return;
+        NSMutableDictionary *entry=[[self songForProgram:pc] mutableCopy];
+        entry[@"rampBars"]=@(((draft&63)>>1)-1);entry[@"rampEnabled"]=@((draft&1)!=0);
+        [self persistSong:entry program:pc];
+        _state->draftRamp.compare_exchange_strong(draft,0);
+    }
+}
+- (void)savePadColor:(NSString *)color program:(NSInteger)pc {
+    if(pc<0||pc>=64||(color.length&&![beat4::rampPaletteNames() containsObject:color]))return;
+    @synchronized(self){
+        NSMutableDictionary *entry=[[self songForProgram:pc] mutableCopy];
+        entry[@"padColor"]=color;[self persistSong:entry program:pc];
     }
 }
 - (void)saveQueue:(NSInteger)beats program:(NSInteger)pc {
