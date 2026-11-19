@@ -75,9 +75,9 @@ public:
   }
   return {-1,false,tempoAt(h.beat)};
  }
- ProgramAction applyTempo(const HostPosition& h,const ProgramMemory& m) noexcept {
+ ProgramAction applyTempo(const HostPosition& h,const ProgramMemory& m,int bars) noexcept {
   if(!valid(h)||active<0)return {};
-  return {-1,false,beginTempo(active,h,m)};
+  return {-1,false,beginTempo(h,m.bpm[active],bars)};
  }
  void stopTempo() noexcept {ramp=false;}
 private:
@@ -105,10 +105,8 @@ private:
   }
   uncertain=false;
  }
- double beginTempo(int pc,const HostPosition& h,const ProgramMemory& m) noexcept {
+ double beginTempo(const HostPosition& h,double target,int bars) noexcept {
   ramp=false;
-  const double target=m.bpm[pc];
-  const int bars=m.rampBars[pc];
   if(bars<0||tempoPitchBend14(target)<0)return 0;
   if(!h.moving||bars==0)return target;
   startBPM=h.bpm;targetBPM=target;rampStart=h.beat;
@@ -126,7 +124,7 @@ private:
  ProgramAction activate(int pc,bool local,const HostPosition& h,const ProgramMemory& m) noexcept {
   const bool changed=active!=pc;
   active=pc;selected=-1;uncertain=false;estimated=local;
-  ProgramAction a{pc,local,valid(h)?beginTempo(pc,h,m):0};
+  ProgramAction a{pc,local,valid(h)?beginTempo(h,m.bpm[pc],m.rampBars[pc]):0};
   if(!valid(h)){ramp=false;haveBeat=false;cycleKnown=false;wasMoving=false;return a;}
   if(!h.moving){ramp=false;cycleKnown=false;wasMoving=false;}
   else if(changed||!cycleKnown){cycleOrigin=h.beat;cycleKnown=true;wasMoving=true;}

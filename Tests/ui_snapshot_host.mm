@@ -398,6 +398,26 @@
    assert(!([bytes[0] intValue]==0xBE&&bytes.count>1&&[bytes[1] intValue]==118));
    if(([bytes[0] intValue]&0xF0)==0xE0)assert([bytes[0] intValue]==0xEE&&[message[@"cable"] intValue]==0);
   }
+  // ON and SAVE can both occur before the render thread sees the command.
+  moving=NO;tick();[unit selectProgram:0];tick();
+  [unit saveSongBPM:148 program:0];
+  moving=YES;beat+=4;tick();
+  [unit previewRamp:1 enabled:YES program:0 apply:YES];
+  [unit saveRampForProgram:0];
+  NSDictionary *savedRamp=[unit rampForProgram:0];
+  assert([savedRamp[@"bars"] intValue]==1&&[savedRamp[@"enabled"] boolValue]&&![savedRamp[@"temporary"] boolValue]);
+  tick();
+  const NSUInteger beforeRampMiddle=messages.count;
+  beat+=2;tick();
+  const int savedMid=beat4::tempoPitchBend14(141.75);
+  assert(messages.count==beforeRampMiddle+1);
+  assert(([messages.lastObject[@"bytes"] isEqual:@[@238,@(savedMid&127),@(savedMid>>7)]]));
+  [unit previewRamp:2 enabled:YES program:0 apply:NO];
+  [unit saveRampForProgram:0];
+  assert([[unit rampForProgram:0][@"bars"] intValue]==2);
+  beat+=2;tick();
+  const int savedEnd=beat4::tempoPitchBend14(148);
+  assert(([messages.lastObject[@"bytes"] isEqual:@[@238,@(savedEnd&127),@(savedEnd>>7)]]));
   NSData *trace=[NSJSONSerialization dataWithJSONObject:@{@"host":@"SIMULATED",@"midiOutput":messages,@"journal":unit.diagnosticLog} options:NSJSONWritingPrettyPrinted error:&error];
   assert(trace && !error && [trace writeToFile:[directory stringByAppendingPathComponent:@"mock-host-midi-trace.json"] atomically:YES]);
   // A host may query the block before negotiation and install callbacks after allocation.

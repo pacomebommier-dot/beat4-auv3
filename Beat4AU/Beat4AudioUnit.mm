@@ -433,11 +433,12 @@ Snapshot load(const State& s) noexcept {
                 appliedConfiguration=command.serial;
             }
             else if(command.kind==7&&command.index==s->engine.active){
-                const int draft=s->draftRamp.load();
-                if(draft==command.value){
-                    loadRampDraft();
-                    if((draft&1)==0)s->engine.stopTempo();
-                    else if(moving)apply(s->engine.applyTempo(position,s->memories));
+                // The queued gesture owns its settings. SAVE only commits the UI draft.
+                const int settings=command.value;
+                if((settings&1)==0)s->engine.stopTempo();
+                else if(moving){
+                    const int bars=((settings&63)>>1)-1;
+                    apply(s->engine.applyTempo(position,s->memories,bars));
                 }
             }
             r=(r+1)%s->commands.size();
