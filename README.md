@@ -18,10 +18,9 @@ BPM entier mémorisé par glissement, sans effet immédiat sur AUM. SAVE ne mém
 
 - Circuit canal 16 → entrée BEAT//4.
 - Sortie **Circuit Projects** → Circuit uniquement : PC 0–63 émis à la frontière calculée pour éviter une seconde queue native.
-- Sortie **AUM Control** → MIDI Control AUM : **CC118 canal 15**, absolu, plage AUM **50–240 BPM** (CC 0 → 50, CC 127 → 240). Le transport utilise CC110 PLAY et CC111 STOP sur canal 16, impulsion 127 puis 0.
+- Sortie **AUM Control** → MIDI Control AUM : CC110 PLAY et CC111 STOP sur canal 16, impulsion 127 puis 0. Le build20 lit le tempo d’AUM et mémorise les BPM cibles de 20 à 240. Les messages MIDI de tempo sont désactivés.
 - AUM maître de la position, du tempo et du transport. Aucun message de commande transport émis par un rappel PC.
 
-Avec le build 18, régler **MIDI CTRL → Transport → Tempo** sur **50–240 BPM**, en remplaçant la borne historique 177. Les 128 valeurs du CC couvrent 190 BPM. Une consigne intermédiaire est quantifiée au niveau le plus proche, à environ 0,75 BPM au maximum. La valeur HOST vient du retour AUM.
 
 La réception exacte du mapping tempo/transport, la phase Drum 1 et le comportement matériel des valeurs queued doivent être vérifiés avant usage scène. Le scheduling est actuellement à résolution du buffer audio. Voir [audit, recette T01–T16 et limites](docs/r10/AUDIT_ET_RECETTE.md).
 

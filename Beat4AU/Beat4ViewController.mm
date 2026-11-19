@@ -174,7 +174,7 @@ static UIColor *circuitColor(NSInteger index){
     _logo.accessibilityLabel=@"BEAT//4, menu SONGS et SET";
     _logo.accessibilityTraits=UIAccessibilityTraitButton;
     [_logo addGestureRecognizer:[[UITapGestureRecognizer alloc]initWithTarget:self action:@selector(showConfigurationMenu:)]];
-    _versionLabel=[self makeLabel:[NSString stringWithFormat:@"v%@",[NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"0.5.19"] size:8 color:RGB(122,145,121)];
+    _versionLabel=[self makeLabel:[NSString stringWithFormat:@"v%@",[NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"0.5.20"] size:8 color:RGB(122,145,121)];
     _modeLabel=[self makeLabel:@"QUEUE" size:10 color:RGB(197,208,197)];
     _hostBPM=[self makeLabel:@"" size:12 color:RGB(145,148,145)];
     _host=[[Beat4TitleLabel alloc]init];_host.text=@"MÉTRONOME";
@@ -350,7 +350,6 @@ static UIColor *circuitColor(NSInteger index){
     NSDictionary *summary=[self.unit previewConfigurationData:data error:&error];
     if(!summary){[self configurationMessage:error.localizedDescription];return;}
     NSString *message=[NSString stringWithFormat:@"%@ SONG(S), %@. Les champs absents seront conservés. Aucun PLAY, STOP ou PC ne sera envoyé.",summary[@"songs"],[summary[@"set"] boolValue]?@"SET inclus":@"SET conservé"];
-    if([summary[@"unsupportedTempos"] intValue]>0)message=[message stringByAppendingFormat:@"\n%@ BPM seront mémorisés mais ne peuvent pas être transmis à AUM par le routage actuel (50–240 BPM).",summary[@"unsupportedTempos"]];
     UIAlertController *alert=[UIAlertController alertControllerWithTitle:@"Charger la configuration ?" message:message preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"Annuler" style:UIAlertActionStyleCancel handler:nil]];
     __weak Beat4ViewController *weakSelf=self;

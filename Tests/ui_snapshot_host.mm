@@ -34,12 +34,11 @@
    if(flags)*flags=moving?AUHostTransportStateMoving:(AUHostTransportStateFlags)0;
    if(sample)*sample=beat*48000*60/128;if(start)*start=0;if(end)*end=0;return YES;
   };
-  __block BOOL failTempo=NO;
   NSMutableArray *messages=[NSMutableArray new];
   unit.MIDIOutputEventBlock=^OSStatus(AUEventSampleTime time,uint8_t cable,NSInteger length,const uint8_t *bytes){
    NSMutableArray *data=[NSMutableArray new];for(NSInteger i=0;i<length;++i)[data addObject:@(bytes[i])];
    [messages addObject:@{@"sample":@(time),@"cable":@(cable),@"bytes":data}];
-   return failTempo&&length==3&&bytes[0]==0xBE&&bytes[1]==118?kAudio_ParamError:noErr;
+   return noErr;
   };
   assert([unit allocateRenderResourcesAndReturnError:&error] && !error);
   AUInternalRenderBlock render=unit.internalRenderBlock;
@@ -145,20 +144,18 @@
   moving=NO;[unit requestTransportToggle];tick();tick();
   NSArray *playPress=@[@191,@110,@127],*playRelease=@[@191,@110,@0];
   assert(messages.count==5 && [messages[3][@"bytes"] isEqual:playPress] && [messages[4][@"bytes"] isEqual:playRelease]);
-  // Exercise the real AU render path: tempo CC on cable 0, PC on cable 1.
-  // Saving a BPM alone remains silent; selecting a known PC at STOP sends it.
+  // BPM storage stays continuous; recalling a project sends its PC only.
   NSData *named=[@"{\"format\":\"BEAT4_CONFIG\",\"version\":1,\"songs\":[{\"song\":1,\"name\":\"A\"},{\"song\":2,\"name\":\"B\"},{\"song\":3,\"name\":\"C\"},{\"song\":12,\"name\":\"RAMP\",\"rampBars\":1}]}" dataUsingEncoding:NSUTF8StringEncoding];
   assert([unit importConfigurationData:named error:&error]);
   for(int pc=0;pc<3;++pc){
-   const int bpm=pc==0?50:pc==1?128:240;
+   const int bpm=pc==0?50:pc==1?97:240;
    const NSUInteger before=messages.count;
    [unit saveSongBPM:bpm program:pc];tick();assert(messages.count==before);
-   [unit selectProgram:pc];tick();assert(messages.count==before+2);
-   NSArray *expectedTempo=@[@190,@118,@(beat4::tempoCC7(bpm))];
+   assert([[unit songForProgram:pc][@"bpm"] intValue]==bpm);
+   [unit selectProgram:pc];tick();assert(messages.count==before+1);
    assert([messages[before][@"cable"] intValue]==1);
-   assert([messages[before+1][@"cable"] intValue]==0);
-   assert([messages[before+1][@"bytes"] isEqual:expectedTempo]);
-   tick();assert(messages.count==before+2); // no unsolicited repeated tempo
+   assert(([messages[before][@"bytes"] isEqual:@[@207,@(pc)]]));
+   tick();assert(messages.count==before+1);
   }
   const NSUInteger beforeUnknown=messages.count;
   [unit selectProgram:3];tick();assert(messages.count==beforeUnknown+1); // PC only
@@ -201,7 +198,8 @@
   const NSUInteger rampBefore=messages.count;beat=35;tick();
   assert(messages.count==rampBefore && unit.currentProgram==10);
   beat=36;tick();assert(unit.currentProgram==11); // queued under active default16 before SAVE
-  beat=40;tick();assert([messages.lastObject[@"bytes"] isEqual:(@[@190,@118,@(beat4::tempoCC7(148))])]);
+  assert(messages.count==rampBefore+1);
+  beat=40;tick();assert(messages.count==rampBefore+1);
   beat=41;tick();
   [unit selectProgram:12];tick();[unit setCycleSteps:16];[unit saveCurrentCycle];
   assert([[unit songForProgram:11][@"steps"] intValue]==16);
@@ -319,7 +317,7 @@
     @"set":@{@"slots":@[@1,[NSNull null],@64,[NSNull null],[NSNull null],[NSNull null],[NSNull null],[NSNull null]],@"on":@YES}};
   NSData *config=[NSJSONSerialization dataWithJSONObject:payload options:0 error:&error];
   NSDictionary *summary=[bank previewConfigurationData:config error:&error];
-  assert([summary[@"songs"] intValue]==2&&[summary[@"set"] boolValue]&&[summary[@"unsupportedTempos"] intValue]==0);
+  assert([summary[@"songs"] intValue]==2&&[summary[@"set"] boolValue]);
   assert([bank importConfigurationData:config error:&error]&&!error);
   assert([[bank songForProgram:0][@"title"] isEqual:@"PORTABLE"]&&[[bank songForProgram:0][@"sub"] intValue]==1);
   assert([[bank songForProgram:63][@"bpm"] intValue]==240&&[[bank songForProgram:63][@"sub"] intValue]==2);
@@ -388,6 +386,11 @@
   assert([menu isKindOfClass:UIAlertController.class]&&menu.actions.count==4);
   assert([menu.actions[0].title containsString:@"Importer"]&&[menu.actions[1].title containsString:@"Exporter"]);
   [vc dismissViewControllerAnimated:NO completion:nil];
+  for(NSDictionary *message in messages){
+   NSArray *bytes=message[@"bytes"];
+   assert(!([bytes[0] intValue]==0xBE&&bytes.count>1&&[bytes[1] intValue]==118));
+   assert(([bytes[0] intValue]&0xF0)!=0xE0);
+  }
   NSData *trace=[NSJSONSerialization dataWithJSONObject:@{@"host":@"SIMULATED",@"midiOutput":messages,@"journal":unit.diagnosticLog} options:NSJSONWritingPrettyPrinted error:&error];
   assert(trace && !error && [trace writeToFile:[directory stringByAppendingPathComponent:@"mock-host-midi-trace.json"] atomically:YES]);
   // A host may query the block before negotiation and install callbacks after allocation.
@@ -423,7 +426,7 @@
   assert(![late.transportSnapshot[@"synced"] boolValue]);
   assert([late.transportSnapshot[@"invalidTimestamps"] unsignedLongLongValue]>0);
   [late deallocateRenderResources];
-  [@"PASS: 12 native UIKit renders, ACTIVE/SELECTED, grid colors and AUv3 MIDI anti-echo on simulated host\n" writeToFile:[directory stringByAppendingPathComponent:@"DONE.txt"] atomically:YES encoding:NSUTF8StringEncoding error:&error];
+  [@"PASS: 12 native UIKit renders, ACTIVE/SELECTED, grid colors, AUv3 MIDI anti-echo and no tempo output on simulated host\n" writeToFile:[directory stringByAppendingPathComponent:@"DONE.txt"] atomically:YES encoding:NSUTF8StringEncoding error:&error];
   assert(!error);[unit deallocateRenderResources];
  } @catch(NSException *exception){
   NSLog(@"R10 snapshot failure: %@",exception);abort();
