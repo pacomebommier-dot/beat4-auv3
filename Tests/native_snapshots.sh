@@ -28,7 +28,8 @@ PY
 xcrun simctl boot "$DEVICE"
 xcrun simctl bootstatus "$DEVICE" -b
 xcrun simctl install "$DEVICE" "$APP"
-xcrun simctl launch "$DEVICE" com.beat4.r10.snapshot-tests
+xcrun simctl launch --stdout="$BUILD/app.stdout" --stderr="$BUILD/app.stderr" "$DEVICE" com.beat4.r10.snapshot-tests
+trap 'cat "$BUILD/app.stderr" "$BUILD/app.stdout" 2>/dev/null || true' ERR
 CONTAINER=$(xcrun simctl get_app_container "$DEVICE" com.beat4.r10.snapshot-tests data)
 python3 - "$CONTAINER/Documents/R10/DONE.txt" <<'PY'
 import pathlib,sys,time

@@ -482,15 +482,16 @@ static UIColor *circuitColor(NSInteger index){
     __weak Beat4ViewController *weakSelf=self;
     for(NSInteger count=-1;count<=20;++count){
         NSString *title=count<0?@"—":[NSString stringWithFormat:@"%ld",(long)count];
-        [actions addObject:[UIAction actionWithTitle:title image:nil identifier:nil discoverabilityTitle:nil attributes:0
-            state:count==bars?UIMenuElementStateOn:UIMenuElementStateOff handler:^(__kindof UIAction *action){
+        UIAction *item=[UIAction actionWithTitle:title image:nil identifier:nil handler:^(__kindof UIAction *action){
                 (void)action;Beat4ViewController *vc=weakSelf;if(!vc)return;
                 NSDictionary *current=[vc.unit rampForProgram:pc];
                 BOOL on=[current[@"enabled"] boolValue];
                 if([current[@"bars"] intValue]<0&&![[vc.unit songForProgram:pc][@"rampEnabled"] isEqual:@NO])
                     on=!beat4::maskSong([vc.unit songForProgram:pc])&&![current[@"temporary"] boolValue];
                 [vc.unit previewRamp:count enabled:on program:pc apply:NO];[vc refreshSong];
-            }]];
+            }];
+        item.state=count==bars?UIMenuElementStateOn:UIMenuElementStateOff;
+        [actions addObject:item];
     }
     _rampDuration.menu=[UIMenu menuWithTitle:@"RAMPE · Mesures" children:actions];
 }
