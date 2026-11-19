@@ -174,7 +174,7 @@ static UIColor *circuitColor(NSInteger index){
     _logo.accessibilityLabel=@"BEAT//4, menu SONGS et SET";
     _logo.accessibilityTraits=UIAccessibilityTraitButton;
     [_logo addGestureRecognizer:[[UITapGestureRecognizer alloc]initWithTarget:self action:@selector(showConfigurationMenu:)]];
-    _versionLabel=[self makeLabel:[NSString stringWithFormat:@"v%@",[NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"0.5.20"] size:8 color:RGB(122,145,121)];
+    _versionLabel=[self makeLabel:[NSString stringWithFormat:@"v%@",[NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"0.5.21"] size:8 color:RGB(122,145,121)];
     _modeLabel=[self makeLabel:@"QUEUE" size:10 color:RGB(197,208,197)];
     _hostBPM=[self makeLabel:@"" size:12 color:RGB(145,148,145)];
     _host=[[Beat4TitleLabel alloc]init];_host.text=@"MÉTRONOME";

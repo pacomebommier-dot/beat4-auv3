@@ -18,7 +18,7 @@ BPM entier mémorisé par glissement, sans effet immédiat sur AUM. SAVE ne mém
 
 - Circuit canal 16 → entrée BEAT//4.
 - Sortie **Circuit Projects** → Circuit uniquement : PC 0–63 émis à la frontière calculée pour éviter une seconde queue native.
-- Sortie **AUM Control** → MIDI Control AUM : CC110 PLAY et CC111 STOP sur canal 16, impulsion 127 puis 0. Le build20 lit le tempo d’AUM et mémorise les BPM cibles de 20 à 240. Les messages MIDI de tempo sont désactivés.
+- Sortie **AUM Control** → MIDI Control AUM : **Tempo PBEND**, canal 15, plage linéaire **20–240 BPM**. CC110 PLAY et CC111 STOP restent sur canal 16, impulsion 127 puis 0.
 - AUM maître de la position, du tempo et du transport. Aucun message de commande transport émis par un rappel PC.
 
 

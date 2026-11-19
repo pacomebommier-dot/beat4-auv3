@@ -2,7 +2,7 @@
 #include "../Beat4AU/Beat4Set.hpp"
 int main(){
  using namespace beat4;
- assert(tempoCC7(50)==0&&tempoCC7(240)==127&&tempoCC7(241)<0);
+ assert(tempoPitchBend14(20)==0&&tempoPitchBend14(240)==16383&&tempoPitchBend14(241)<0);
  SetEngine set;set.assign(9,1);assert(set.first()==9);
  ProgramMemory m;m.bpm[1]=240;m.rampBars[1]=4;
  HostPosition h{true,true,0,0,4,120};

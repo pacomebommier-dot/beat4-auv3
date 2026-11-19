@@ -5,15 +5,18 @@
 int main(){
  using namespace beat4;
  auto pc=circuitMessage(39);assert(pc.cable==1 && pc.length==2 && pc.bytes[0]==0xCF && pc.bytes[1]==39);
- // Full CC118 range, with nearest-value rounding and exact endpoints.
- for(int bpm=50;bpm<=240;++bpm){
-  auto tempo=tempoMessage(bpm);
-  assert(tempo.cable==0 && tempo.length==3 && tempo.bytes[0]==0xBE);
-  assert(tempo.bytes[1]==118 && tempo.bytes[2]<=127);
-  assert(std::abs(50+tempo.bytes[2]*190./127-bpm)<=190./254+1e-9);
+ // Every stored integer is reachable after rounding the host value.
+ for(int bpm=20;bpm<=240;++bpm){
+  const auto tempo=tempoMessage(bpm);
+  assert(tempo.cable==0 && tempo.length==3 && tempo.bytes[0]==0xEE);
+  assert(tempo.bytes[1]<128 && tempo.bytes[2]<128);
+  const int bend=tempo.bytes[1]+128*tempo.bytes[2];
+  const double actual=20+bend*220./16383;
+  assert(std::lround(actual)==bpm && std::abs(actual-bpm)<=110./16383+1e-9);
  }
- assert(tempoMessage(50).bytes[2]==0 && tempoMessage(240).bytes[2]==127);
- for(double invalid:{0.,20.,49.9,240.1,std::numeric_limits<double>::quiet_NaN(),
+ assert(tempoMessage(20).bytes[1]==0 && tempoMessage(20).bytes[2]==0);
+ assert(tempoMessage(240).bytes[1]==127 && tempoMessage(240).bytes[2]==127);
+ for(double invalid:{0.,19.9,240.1,std::numeric_limits<double>::quiet_NaN(),
                      std::numeric_limits<double>::infinity(),-std::numeric_limits<double>::infinity()})
   assert(tempoMessage(invalid).length==0);
  assert(circuitMessage(64).length==0 && tempoMessage(0).length==0);

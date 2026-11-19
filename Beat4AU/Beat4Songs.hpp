@@ -15,7 +15,7 @@ struct Song {
 };
 constexpr int kNumberOfPrograms = 128;
 constexpr int kSetCount = 10;
-constexpr double kTempoMin = 50, kTempoMax = 240;
+constexpr double kTempoMin = 20, kTempoMax = 240;
 inline bool validProgram(int pg) noexcept {return pg >= 0 && pg < kNumberOfPrograms;}
 inline bool validBPM(double bpm) noexcept {return std::isfinite(bpm) && bpm >= 20 && bpm <= 240;}
 inline bool validSub(int pitchClass) noexcept {return pitchClass >= 0 && pitchClass < 12;}
@@ -28,10 +28,10 @@ inline double subFrequency(int pitchClass) noexcept {
     if (!validSub(pitchClass)) return 43.653528929; // neutral sound until song known
     return 440.0 * std::pow(2.0, (24 + pitchClass - 69.0) / 12.0);
 }
-// AUM CC118 (channel 15): configure its absolute range to 50–240 BPM.
-inline int tempoCC7(double bpm) noexcept {
+// AUM Tempo: Pitch Bend on channel 15, linear 20–240 BPM.
+inline int tempoPitchBend14(double bpm) noexcept {
     if (!std::isfinite(bpm) || bpm < kTempoMin || bpm > kTempoMax) return -1;
-    return static_cast<int>(std::lround((bpm-kTempoMin)*127/(kTempoMax-kTempoMin)));
+    return static_cast<int>(std::lround((bpm-kTempoMin)*16383/(kTempoMax-kTempoMin)));
 }
 inline bool isCircuitProgramChange(uint8_t status, uint8_t program, int &pg) noexcept {
     if (status != 0xCF || program > 127) return false; // channel 16 only
@@ -47,8 +47,8 @@ inline MIDIMessage circuitMessage(int pc) noexcept {
  return {1,2,{0xCF,static_cast<uint8_t>(pc),0}};
 }
 inline MIDIMessage tempoMessage(double bpm) noexcept {
- int n=tempoCC7(bpm);if(n<0)return {};
- return {0,3,{0xBE,118,static_cast<uint8_t>(n)}};
+ int n=tempoPitchBend14(bpm);if(n<0)return {};
+ return {0,3,{0xEE,static_cast<uint8_t>(n&127),static_cast<uint8_t>((n>>7)&127)}};
 }
 
 // Existing V0.5.6 AUM mapping: channel 16, CC110 START / CC111 STOP.

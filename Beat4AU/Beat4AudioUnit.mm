@@ -75,6 +75,7 @@ struct State {
         return bits|(uint64_t(set.on)<<61)|(uint64_t(set.restartTerminal)<<62);
     }
     beat4::ProgramMemory memories;
+    double lastTempoSent=0;
     std::atomic<bool> midiOutputConfigured{false};
     State() {for(int i=0;i<128;++i){notes[i].store(-1);tempos[i].store(0);queues[i].store(0);cycleSteps[i].store(16);rampBars[i].store(-1);}}
 };
@@ -243,7 +244,7 @@ Snapshot load(const State& s) noexcept {
     _state->engine=beat4::ProgramEngine{};_state->engine.active=active;
     _state->set.queuedPosition=-1;_state->set.origin=beat4::RequestOrigin::None;
     _state->xone.cancel();
-    _state->transportPulse=beat4::TransportPulse{};
+    _state->transportPulse=beat4::TransportPulse{};_state->lastTempoSent=0;
     _state->callbacks.store(0);_state->tick.store(0);_state->selectedPC.store(-1);
     _state->uncertain.store(false);_state->localStop.store(0);
     [self refreshHostCallbacks:YES];
@@ -347,6 +348,15 @@ Snapshot load(const State& s) noexcept {
                 }
                 s->journal.write(3,a.activated,a.sendPC?1:0,beat);previousActive=a.activated;
             }
+            if(midiOut && beat4::shouldEmitTempo(a,s->lastTempoSent)){
+                auto message=beat4::tempoMessage(a.tempo);
+                if(message.length){
+                    const auto status=midiOut(sampleTime,message.cable,message.length,message.bytes.data());
+                    if(status==noErr)s->lastTempoSent=a.tempo;
+                    else {s->journal.write(6,s->engine.active,2,beat);return false;}
+                }
+            }
+            if(!midiOut && beat4::shouldEmitTempo(a,s->lastTempoSent))return false;
             return true;
         };
         auto playGesture=[&](bool longPress){

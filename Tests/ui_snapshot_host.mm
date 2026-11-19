@@ -144,18 +144,21 @@
   moving=NO;[unit requestTransportToggle];tick();tick();
   NSArray *playPress=@[@191,@110,@127],*playRelease=@[@191,@110,@0];
   assert(messages.count==5 && [messages[3][@"bytes"] isEqual:playPress] && [messages[4][@"bytes"] isEqual:playRelease]);
-  // BPM storage stays continuous; recalling a project sends its PC only.
+  // Stored BPMs use the full range, including values skipped by CC118.
   NSData *named=[@"{\"format\":\"BEAT4_CONFIG\",\"version\":1,\"songs\":[{\"song\":1,\"name\":\"A\"},{\"song\":2,\"name\":\"B\"},{\"song\":3,\"name\":\"C\"},{\"song\":12,\"name\":\"RAMP\",\"rampBars\":1}]}" dataUsingEncoding:NSUTF8StringEncoding];
   assert([unit importConfigurationData:named error:&error]);
   for(int pc=0;pc<3;++pc){
-   const int bpm=pc==0?50:pc==1?97:240;
+   const int bpm=pc==0?20:pc==1?97:240;
    const NSUInteger before=messages.count;
    [unit saveSongBPM:bpm program:pc];tick();assert(messages.count==before);
    assert([[unit songForProgram:pc][@"bpm"] intValue]==bpm);
-   [unit selectProgram:pc];tick();assert(messages.count==before+1);
+   [unit selectProgram:pc];tick();assert(messages.count==before+2);
    assert([messages[before][@"cable"] intValue]==1);
    assert(([messages[before][@"bytes"] isEqual:@[@207,@(pc)]]));
-   tick();assert(messages.count==before+1);
+   const int bend=beat4::tempoPitchBend14(bpm);
+   assert([messages[before+1][@"cable"] intValue]==0);
+   assert(([messages[before+1][@"bytes"] isEqual:@[@238,@(bend&127),@(bend>>7)]]));
+   tick();assert(messages.count==before+2);
   }
   const NSUInteger beforeUnknown=messages.count;
   [unit selectProgram:3];tick();assert(messages.count==beforeUnknown+1); // PC only
@@ -185,7 +188,7 @@
   assert([diagnostic[@"awaitingTransport"] intValue]==-1);
   for(NSDictionary *message in messages){
    NSArray *bytes=message[@"bytes"];
-   assert(([bytes[0] intValue]&0xF0)!=0xE0); // no pitch bend on either output
+   if(([bytes[0] intValue]&0xF0)==0xE0)assert([bytes[0] intValue]==0xEE&&[message[@"cable"] intValue]==0); // no pitch bend on either output
   }
   // Native AU regression: selection starts tempo during queue and SAVE edits ACTIVE.
   input=nullptr;moving=NO;tick();[unit selectProgram:10];tick();
@@ -198,8 +201,12 @@
   const NSUInteger rampBefore=messages.count;beat=35;tick();
   assert(messages.count==rampBefore && unit.currentProgram==10);
   beat=36;tick();assert(unit.currentProgram==11); // queued under active default16 before SAVE
-  assert(messages.count==rampBefore+1);
-  beat=40;tick();assert(messages.count==rampBefore+1);
+  assert(messages.count==rampBefore+2);
+  beat=38;tick();
+  const int middle=beat4::tempoPitchBend14(141.75);
+  assert(([messages.lastObject[@"bytes"] isEqual:@[@238,@(middle&127),@(middle>>7)]]));
+  beat=40;tick();const int target=beat4::tempoPitchBend14(148);
+  assert(([messages.lastObject[@"bytes"] isEqual:@[@238,@(target&127),@(target>>7)]]));
   beat=41;tick();
   [unit selectProgram:12];tick();[unit setCycleSteps:16];[unit saveCurrentCycle];
   assert([[unit songForProgram:11][@"steps"] intValue]==16);
@@ -389,7 +396,7 @@
   for(NSDictionary *message in messages){
    NSArray *bytes=message[@"bytes"];
    assert(!([bytes[0] intValue]==0xBE&&bytes.count>1&&[bytes[1] intValue]==118));
-   assert(([bytes[0] intValue]&0xF0)!=0xE0);
+   if(([bytes[0] intValue]&0xF0)==0xE0)assert([bytes[0] intValue]==0xEE&&[message[@"cable"] intValue]==0);
   }
   NSData *trace=[NSJSONSerialization dataWithJSONObject:@{@"host":@"SIMULATED",@"midiOutput":messages,@"journal":unit.diagnosticLog} options:NSJSONWritingPrettyPrinted error:&error];
   assert(trace && !error && [trace writeToFile:[directory stringByAppendingPathComponent:@"mock-host-midi-trace.json"] atomically:YES]);
@@ -426,7 +433,7 @@
   assert(![late.transportSnapshot[@"synced"] boolValue]);
   assert([late.transportSnapshot[@"invalidTimestamps"] unsignedLongLongValue]>0);
   [late deallocateRenderResources];
-  [@"PASS: 12 native UIKit renders, ACTIVE/SELECTED, grid colors, AUv3 MIDI anti-echo and no tempo output on simulated host\n" writeToFile:[directory stringByAppendingPathComponent:@"DONE.txt"] atomically:YES encoding:NSUTF8StringEncoding error:&error];
+  [@"PASS: 12 native UIKit renders, ACTIVE/SELECTED, grid colors, AUv3 MIDI anti-echo and Pitch Bend tempo on simulated host\n" writeToFile:[directory stringByAppendingPathComponent:@"DONE.txt"] atomically:YES encoding:NSUTF8StringEncoding error:&error];
   assert(!error);[unit deallocateRenderResources];
  } @catch(NSException *exception){
   NSLog(@"R10 snapshot failure: %@",exception);abort();

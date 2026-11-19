@@ -14,8 +14,8 @@ struct ProgramMemory {
 struct HostPosition { bool valid=false, moving=false; double beat=0, barStart=0, barLength=4, bpm=0; };
 struct ProgramAction { int activated=-1; bool sendPC=false; double tempo=0; };
 inline bool shouldEmitTempo(ProgramAction a,double last) noexcept {
- const int value=tempoCC7(a.tempo);
- return value>=0 && (a.activated>=0 || value!=tempoCC7(last));
+ const int value=tempoPitchBend14(a.tempo);
+ return value>=0 && (a.activated>=0 || value!=tempoPitchBend14(last));
 }
 class ProgramEngine {
 public:
@@ -109,7 +109,7 @@ private:
   ramp=false;
   const double target=m.bpm[pc];
   const int bars=m.rampBars[pc];
-  if(bars<0||tempoCC7(target)<0)return 0;
+  if(bars<0||tempoPitchBend14(target)<0)return 0;
   if(!h.moving||bars==0)return target;
   startBPM=h.bpm;targetBPM=target;rampStart=h.beat;
   rampLength=bars*h.barLength;ramp=true;
