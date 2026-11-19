@@ -389,6 +389,10 @@ static UIColor *circuitColor(NSInteger index){
     [alert addAction:[UIAlertAction actionWithTitle:@"Fermer" style:UIAlertActionStyleCancel handler:nil]];
     [self presentViewController:alert animated:YES completion:nil];
 }
+- (void)refreshBPMColorForTarget:(double)target host:(double)host {
+    const bool matches=host>0&&std::round(target*10)==std::round(host*10);
+    [_bpmButton setTitleColor:beat4::validBPM(target)?(matches?UIColor.whiteColor:RGB(235,155,65)):RGB(110,120,111) forState:UIControlStateNormal];
+}
 - (void)refreshSong {
     NSDictionary *state=self.frameSnapshot ?: [self.unit transportSnapshot];
     NSInteger pg=[state[@"pg"] integerValue];
@@ -407,6 +411,8 @@ static UIColor *circuitColor(NSInteger index){
     [_songButton setTitle:name forState:UIControlStateNormal];
     double bpm=[song[@"bpm"] doubleValue];
     if(!self.bpmDragging)[_bpmButton setTitle:bpm>=20?[NSString stringWithFormat:@"%.0f BPM",std::round(bpm)]:@"--- BPM" forState:UIControlStateNormal];
+    const double displayedBPM=self.bpmDragging&&self.bpmDragProgram==pg?self.bpmDragTarget:bpm;
+    [self refreshBPMColorForTarget:displayedBPM host:[state[@"bpm"] doubleValue]];
     int note=[song[@"sub"] intValue];
     [_noteButton setTitle:[NSString stringWithUTF8String:beat4::noteName(note)] forState:UIControlStateNormal];
     BOOL enabled=[[self.unit transportSnapshot][@"kickEnabled"] boolValue];
@@ -447,6 +453,7 @@ static UIColor *circuitColor(NSInteger index){
         double target=beat4::draggedBPM((int)self.bpmDragStart,dx);
         self.bpmDragTarget=target;
         [_bpmButton setTitle:[NSString stringWithFormat:@"%.0f BPM",target] forState:UIControlStateNormal];
+        [self refreshBPMColorForTarget:target host:[[self.unit transportSnapshot][@"bpm"] doubleValue]];
         if(gesture.state==UIGestureRecognizerStateEnded){
             [self.unit saveSongBPM:target program:self.bpmDragProgram];
             self.bpmDragging=NO;
@@ -667,13 +674,10 @@ static UIColor *circuitColor(NSInteger index){
     [_playButton setTitle:moving&&!setOn?@"■":@"▶" forState:UIControlStateNormal];
     _playButton.accessibilityLabel=moving?(setOn?@"SONG suivant, appui long pour arrêter":@"Arrêter"):@"Démarrer";
     [self refreshSong];[self refreshPage];
-    double target=self.bpmDragging&&self.bpmDragProgram==pg?self.bpmDragTarget:[[self.unit currentSong][@"bpm"] doubleValue];
     const double host=[data[@"bpm"] doubleValue];
     NSString *tempo=host>0?[[NSString stringWithFormat:@"%.1f",host] stringByReplacingOccurrencesOfString:@"." withString:@","]:@"—";
     if([tempo hasSuffix:@",0"])tempo=[tempo substringToIndex:tempo.length-2];
     _hostBPM.text=[NSString stringWithFormat:@"HOST %@ BPM",tempo];
-    const bool matches=host>0&&std::round(target*10)==std::round(host*10);
-    [_bpmButton setTitleColor:beat4::validBPM(target)?(matches?UIColor.whiteColor:RGB(235,155,65)):RGB(110,120,111) forState:UIControlStateNormal];
     BOOL enabled=[data[@"kickEnabled"] boolValue];
     [_kickButton setTitleColor:enabled?RGB(177,225,164):RGB(110,120,111) forState:UIControlStateNormal];
     if(!_levelSlider.tracking)_levelSlider.value=[data[@"kickLevel"] floatValue];
