@@ -328,7 +328,7 @@ static UIColor *circuitColor(NSInteger index){
 }
 - (void)showConfigurationMenu:(id)sender {
     (void)sender;
-    UIAlertController *menu=[UIAlertController alertControllerWithTitle:@"SONGS / SET" message:@"Importer ou sauvegarder les SONGS et les huit positions du SET." preferredStyle:UIAlertControllerStyleActionSheet];
+    UIAlertController *menu=[UIAlertController alertControllerWithTitle:@"SONGS / SET" message:@"Importer ou sauvegarder les SONGS et les dix positions du SET." preferredStyle:UIAlertControllerStyleActionSheet];
     __weak Beat4ViewController *weakSelf=self;
     [menu addAction:[UIAlertAction actionWithTitle:@"Importer un fichier SONGS / SET" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){
         (void)action;UIDocumentPickerViewController *picker=[[UIDocumentPickerViewController alloc]initWithDocumentTypes:@[@"public.json"] inMode:UIDocumentPickerModeImport];
@@ -531,7 +531,7 @@ static UIColor *circuitColor(NSInteger index){
 }
 - (void)confirmResetSet:(UILongPressGestureRecognizer*)gesture {
     if(gesture.state!=UIGestureRecognizerStateBegan)return;
-    UIAlertController *alert=[UIAlertController alertControllerWithTitle:@"RESET CACHE SET" message:@"Revenir au premier pad renseigné. Le SONG actif, les huit affectations et le QUEUE sont conservés." preferredStyle:UIAlertControllerStyleAlert];
+    UIAlertController *alert=[UIAlertController alertControllerWithTitle:@"RESET CACHE SET" message:@"Revenir au premier pad renseigné. Le SONG actif, les dix affectations et le QUEUE sont conservés." preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"Annuler" style:UIAlertActionStyleCancel handler:nil]];
     __weak Beat4ViewController *weakSelf=self;
     [alert addAction:[UIAlertAction actionWithTitle:@"Confirmer" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){

@@ -95,7 +95,7 @@
       int pc=(page-1)*32+(int)pad.tag;
       assert(!pad.hidden);
       if(pc==7){assert([pad.accessibilityLabel containsString:@"ACTIF"]);assert([pad.currentTitle isEqual:@"R10 NATIVE TEST"]);}
-      else assert([pad.currentTitle isEqual:[NSString stringWithFormat:@"%02d",pc+1]]);
+      else assert(([pad.currentTitle isEqual:[NSString stringWithFormat:@"%02d",pc+1]]));
       if(pc==39)assert([pad.accessibilityLabel containsString:@"EN ATTENTE"]);
       CGFloat r=0,g=0,b=0,a=0;assert([pad.backgroundColor getRed:&r green:&g blue:&b alpha:&a]);
       if(pc==7)assert(std::abs(r-60./255)<.01&&std::abs(g-145./255)<.01);
@@ -365,7 +365,7 @@
   assert(std::abs(r-232./255)<.01);
   [vc performSelector:@selector(showConfigurationMenu:) withObject:nil];
   UIAlertController *menu=(UIAlertController*)vc.presentedViewController;
-  assert([menu isKindOfClass:UIAlertController.class]&&menu.actions.count>=4);
+  assert([menu isKindOfClass:UIAlertController.class]&&menu.actions.count==4);
   assert([menu.actions[0].title containsString:@"Importer"]&&[menu.actions[1].title containsString:@"Exporter"]);
   [vc dismissViewControllerAnimated:NO completion:nil];
   NSData *trace=[NSJSONSerialization dataWithJSONObject:@{@"host":@"SIMULATED",@"midiOutput":messages,@"journal":unit.diagnosticLog} options:NSJSONWritingPrettyPrinted error:&error];
