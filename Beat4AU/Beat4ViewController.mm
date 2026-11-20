@@ -304,14 +304,21 @@ static UIColor *circuitColor(NSInteger index){
     const auto controls=beat4::relayControlsFor(self.view.bounds.size.width,self.view.bounds.size.height);
     const CGFloat size=controls.font;
     _modeLabel.frame=frame(controls.queue);_modeLabel.font=Mono(size);
-    _modeControl.frame=frame(controls.steps);_rampToggle.frame=frame(controls.ramp);
+    // UIKit lays out its selection image at its native 32pt height.
+    // Scale the whole control uniformly, rather than compressing its bounds.
+    const CGFloat controlScale=MIN(1.,controls.steps.h/32.);
+    _modeControl.transform=CGAffineTransformIdentity;
+    _modeControl.bounds=CGRectMake(0,0,controls.steps.w/controlScale,32.);
+    _modeControl.center=CGPointMake(controls.steps.x+controls.steps.w/2,controls.steps.y+controls.steps.h/2);
+    _modeControl.transform=CGAffineTransformMakeScale(controlScale,controlScale);
+    _rampToggle.frame=frame(controls.ramp);
     _rampDuration.frame=frame(controls.bars);_saveButton.frame=frame(controls.save);
     _relayToggle.frame=frame(controls.relay);_relayDuration.frame=frame(controls.loop);
     _relayFadeLabel.frame=frame(controls.fadeLabel);_relayFade.frame=frame(controls.fade);
     for(UIButton *button in @[_rampToggle,_rampDuration,_saveButton,_relayToggle,_relayDuration,_relayFadeLabel,_relayFade])button.titleLabel.font=Mono(size);
     for(UIButton *button in @[_rampDuration,_relayDuration,_relayFade])button.layer.cornerRadius=.75*size;
     _modeControl.selectedSegmentTintColor=RGB(190,234,178);
-    [_modeControl setTitleTextAttributes:@{NSFontAttributeName:Mono(size),NSForegroundColorAttributeName:RGB(228,235,220)} forState:UIControlStateNormal];
+    [_modeControl setTitleTextAttributes:@{NSFontAttributeName:Mono(size/controlScale),NSForegroundColorAttributeName:RGB(228,235,220)} forState:UIControlStateNormal];
     [_modeControl setTitleTextAttributes:@{NSForegroundColorAttributeName:RGB(19,27,18)} forState:UIControlStateSelected];
     _modeControl.clipsToBounds=YES;
     [_modeControl setNeedsLayout];[_modeControl layoutIfNeeded];

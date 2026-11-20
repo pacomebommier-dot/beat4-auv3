@@ -99,6 +99,7 @@
     [relayToggle sendActionsForControlEvents:UIControlEventTouchUpInside];[vc updateDisplay:nil];assert(!relayFade.enabled);
     assert(CGRectGetMaxX(relayFade.frame)<=size.width+0.1&&CGRectGetMaxY(relayFade.frame)<=size.height);
     assert([[vc valueForKey:@"modeControl"] clipsToBounds]);
+    assert(std::abs(((UISegmentedControl*)[vc valueForKey:@"modeControl"]).bounds.size.height-32)<.01);
     UISlider *slider=[vc valueForKey:@"levelSlider"];
     CGFloat trackCenter=CGRectGetMidY(slider.frame);
     auto capCenter=[](UIView *v,UIFont *font){
