@@ -20,5 +20,9 @@ int main(){using namespace beat4;
  assert(std::abs(relayEventBeat(4,120,48000,64,128)-(4+64./24000))<1e-10);
  assert(relayEventBeat(4,120,48000,-1,128)==4);
  assert(relayEventBeat(4,120,48000,128,128)==4);
+ delivery.offer(packet);delivery.flush(h,.005,[](const RelayPacket&){return false;});h.beat=1;h.barStart=0;
+ delivery.flush(h,.005,[](const RelayPacket& p){assert(p.kind==3);return true;});
+ auto bad=relayMessage(packet);bad.bytes[15]=25;assert(decodeRelayMessage(bad).kind==0);
+ bad=relayMessage(packet);bad.bytes[25]=127;assert(decodeRelayMessage(bad).kind==0);
  puts("RELAY delivery: retained payload/id, bounded retries, STOP/expiry/supersession fallback, drop bound and MIDI offsets PASS");
 }

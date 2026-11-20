@@ -40,8 +40,8 @@ struct State {
     std::atomic<bool> kickEnabled{false}; // OFF at first boot: no surprising audio.
     std::array<std::atomic<int>,128> queues, cycleSteps, rampBars;
     std::array<std::atomic<uint32_t>,128> relaySettings{};
-    beat4::RelayClock relayClock;
-    std::atomic<uint64_t> relaySent{0},relayTransitions{0};std::atomic<int> relayStatus{0};
+    beat4::RelayClock relayClock;beat4::RelayDelivery relayDelivery;
+    std::atomic<uint64_t> relaySent{0},relayTransitions{0},relayFailures{0},relayCanceled{0},relayDropped{0};std::atomic<int> relayStatus{0};
     uint32_t relayLastSettings=~uint32_t(0);bool relayLastMoving=false,relayLastValid=false;double relayLastBeat=-1e20,relayLastOrigin=-1e20;
     std::atomic<int> draftRamp{0};
     std::atomic<int> draftSteps{16}, localPC{-1}, selectedPC{-1}, transportRequest{-1};
@@ -337,11 +337,11 @@ Snapshot load(const State& s) noexcept {
         loadRampDraft();
         s->relayClock.observe(position);
         auto sendRelay=[&](const beat4::RelayPacket& packet){
-            if(!midiOut)return false;const auto message=beat4::relayMessage(packet);
+            if(!midiOut){s->relayStatus.store(kAudioUnitErr_CannotDoInCurrentContext);s->relayFailures.fetch_add(1);return false;}const auto message=beat4::relayMessage(packet);
             const auto status=midiOut(sampleTime,2,message.length,message.bytes.data());
             s->relayStatus.store(status);if(status==noErr){s->relaySent.fetch_add(1);if(packet.kind==2)s->relayTransitions.fetch_add(1);}
-            if(status!=noErr)s->journal.write(6,packet.program,4,beat);
-            else s->journal.write(packet.kind==2?21:20,packet.program,packet.previous,packet.effectiveBeat);
+            if(status!=noErr){s->relayFailures.fetch_add(1);s->journal.write(6,packet.program,4,beat);}
+            else s->journal.write(packet.kind==2?21:packet.kind==3?22:20,packet.program,packet.previous,packet.effectiveBeat);
             return status==noErr;
         };
         int previousActive=s->engine.active;
@@ -358,7 +358,7 @@ Snapshot load(const State& s) noexcept {
                 const int outgoing=s->relayClock.active;
                 if(outgoing>=0&&position.valid&&position.moving){
                     const auto settings=beat4::unpackRelaySettings(s->relaySettings[outgoing].load());
-                    sendRelay(s->relayClock.transition(a.activated,a.activationBeat,settings,position));
+                    s->relayDelivery.offer(s->relayClock.transition(a.activated,a.activationBeat,settings,position));
                 }else s->relayClock.start(a.activated,a.activationBeat,position.valid&&position.moving);
             }
             if(a.activated>=0){
@@ -429,7 +429,12 @@ Snapshot load(const State& s) noexcept {
                 // for independent controllers requesting a quantized recall.
                 if(e->MIDI.cable==1)apply(s->set.request(raw%64,beat4::RequestOrigin::External,-1,position,s->memories));
                 else if(raw>=64)apply(s->set.request(raw%64,beat4::RequestOrigin::CircuitQueued,-1,position,s->memories));
-                else apply(s->set.confirm(raw,position,s->memories));
+                else {
+                    auto confirmed=s->set.confirm(raw,position,s->memories);
+                    if(confirmed.newCycle&&validTime&&e->head.eventSampleTime>=sampleTime)
+                        confirmed.activationBeat=beat4::relayEventBeat(beat,tempo,sampleRate,e->head.eventSampleTime-sampleTime,frameCount);
+                    apply(confirmed);
+                }
             }
         }
         previousActive=s->engine.active;
@@ -466,9 +471,11 @@ Snapshot load(const State& s) noexcept {
         }
         s->readCommand.store(r,std::memory_order_release);
         apply(s->set.advance(position,s->memories));
+        s->relayDelivery.flush(position,sampleRate>0?frameCount/sampleRate:0,sendRelay);
+        s->relayCanceled.store(s->relayDelivery.canceled);s->relayDropped.store(s->relayDelivery.dropped);
         const int relayPC=s->relayClock.active;
         const uint32_t relayWord=relayPC>=0?s->relaySettings[relayPC].load():0;
-        if(midiOut&&(relayWord!=s->relayLastSettings||moving!=s->relayLastMoving||position.valid!=s->relayLastValid||
+        if(midiOut&&!s->relayDelivery.pending()&&(relayWord!=s->relayLastSettings||moving!=s->relayLastMoving||position.valid!=s->relayLastValid||
            s->relayClock.origin!=s->relayLastOrigin||beat<s->relayLastBeat||beat>=s->relayLastBeat+1)){
             if(sendRelay(s->relayClock.snapshot(beat4::unpackRelaySettings(relayWord),position))){
                 s->relayLastSettings=relayWord;s->relayLastMoving=moving;s->relayLastValid=position.valid;
@@ -581,7 +588,7 @@ Snapshot load(const State& s) noexcept {
              @"bpm":@(s.bpm),@"bar":@(d.bar),@"numerator":@(s.numerator),
              @"denominator":@(s.denominator),@"pg":@(s.pg),
              @"kickEnabled":@(_state->kickEnabled.load()),@"kickLevel":@(_state->kickLevel.load()),
-             @"relaySent":@(_state->relaySent.load()),@"relayTransitions":@(_state->relayTransitions.load()),@"relayStatus":@(_state->relayStatus.load()),
+             @"relayFailures":@(_state->relayFailures.load()),@"relayCanceled":@(_state->relayCanceled.load()),@"relayDropped":@(_state->relayDropped.load()),@"relaySent":@(_state->relaySent.load()),@"relayTransitions":@(_state->relayTransitions.load()),@"relayStatus":@(_state->relayStatus.load()),
              @"midiOut":@(_state->midiOutputConfigured.load()),
              @"selectedPC":@(s.selected),@"uncertain":@(s.uncertain),@"estimated":@(s.estimated),
              @"cycleSteps":@(s.cycleSteps),@"displayBeat":@(projected),
@@ -808,6 +815,7 @@ Snapshot load(const State& s) noexcept {
 - (void)saveRelayEnabled:(BOOL)enabled bars:(NSInteger)bars fade:(NSInteger)fade program:(NSInteger)pc {
     if(pc<0||pc>=64||bars<1||bars>15||fade<1||fade>24)return;
     @synchronized(self){
+        if(pc!=[self currentProgram])return; // stale menu after external PCH
         if(!beat4::namedSong([self songForProgram:pc]))return;
         NSMutableDictionary *entry=[[self songForProgram:pc] mutableCopy];
         entry[@"relayEnabled"]=@(enabled);entry[@"relayBars"]=@(bars);entry[@"relayFadeBars"]=@(fade);

@@ -5,6 +5,7 @@
 #include <cassert>
 #include <cmath>
 #include "../Beat4AU/Beat4Songs.hpp"
+#include "../Beat4AU/Beat4Relay.hpp"
 #import <QuartzCore/QuartzCore.h>
 
 @interface Beat4ViewController (SnapshotTest)
@@ -506,6 +507,31 @@
   assert(![late.transportSnapshot[@"synced"] boolValue]);
   assert([late.transportSnapshot[@"invalidTimestamps"] unsignedLongLongValue]>0);
   [late deallocateRenderResources];
+  // Real AU output failure injection, isolated from legacy MIDI assertions.
+  Beat4AudioUnit *deliveryUnit=[[Beat4AudioUnit alloc]initWithComponentDescription:desc options:0 error:&error];assert(deliveryUnit&&!error);
+  moving=NO;beat=0;hostBPM=120;
+  deliveryUnit.musicalContextBlock=unit.musicalContextBlock;deliveryUnit.transportStateBlock=unit.transportStateBlock;
+  __block int failTransitions=0;NSMutableArray<NSData*> *attempts=[NSMutableArray new];
+  deliveryUnit.MIDIOutputEventBlock=^OSStatus(AUEventSampleTime t,uint8_t cable,NSInteger length,const uint8_t *bytes){
+   (void)t;if(cable==2&&length==67&&bytes[6]>=2){[attempts addObject:[NSData dataWithBytes:bytes length:length]];if(bytes[6]==2&&failTransitions>0){--failTransitions;return -1;}}return noErr;
+  };
+  assert([deliveryUnit allocateRenderResourcesAndReturnError:&error]);auto deliveryRender=deliveryUnit.internalRenderBlock;
+  __block const AURenderEvent *deliveryInput=nullptr;
+  void (^deliveryTick)(void)=^{float samples[256]={};AudioBufferList b{};b.mNumberBuffers=1;b.mBuffers[0]={2,sizeof(samples),samples};AudioTimeStamp t{};t.mFlags=kAudioTimeStampSampleTimeValid;t.mSampleTime=beat*24000;AudioUnitRenderActionFlags f=0;assert(deliveryRender(&f,&t,128,0,&b,deliveryInput,nil)==noErr);};
+  [deliveryUnit selectProgram:0];deliveryTick();[deliveryUnit saveSongTitle:@"DELIVERY OLD"];[deliveryUnit saveRelayEnabled:YES bars:5 fade:2 program:0];
+  moving=YES;deliveryTick();beat=1;[deliveryUnit selectProgram:1];deliveryTick();failTransitions=1;beat=4;deliveryTick();
+  assert(attempts.count==1&&[deliveryUnit.transportSnapshot[@"relayTransitions"] intValue]==0);
+  beat=4.005;deliveryTick();assert(attempts.count==2&&[attempts[0] isEqual:attempts[1]]);
+  beat4::RelayMIDI wire;wire.length=67;[attempts[1] getBytes:wire.bytes.data() length:67];auto decoded=beat4::decodeRelayMessage(wire);
+  assert(decoded.kind==2&&decoded.previous==0&&decoded.program==1&&decoded.settings.bars==5&&decoded.settings.fade==2&&decoded.effectiveBeat==4);
+  assert([deliveryUnit.transportSnapshot[@"relayFailures"] intValue]==1&&[deliveryUnit.transportSnapshot[@"relayTransitions"] intValue]==1);
+  beat=5;[deliveryUnit selectProgram:2];deliveryTick();failTransitions=1;beat=8;deliveryTick();moving=NO;deliveryTick();
+  assert(((const uint8_t*)attempts.lastObject.bytes)[6]==3&&[deliveryUnit.transportSnapshot[@"relayTransitions"] intValue]==1);
+  assert([deliveryUnit.transportSnapshot[@"relayCanceled"] intValue]==1);
+  moving=YES;beat=9;deliveryTick();AURenderEvent confirmation{};confirmation.head.eventType=AURenderEventMIDI;confirmation.head.eventSampleTime=static_cast<AUEventSampleTime>(beat*24000)+64;confirmation.MIDI.length=2;confirmation.MIDI.data[0]=0xCF;confirmation.MIDI.data[1]=3;deliveryInput=&confirmation;deliveryTick();deliveryInput=nullptr;
+  [attempts.lastObject getBytes:wire.bytes.data() length:67];decoded=beat4::decodeRelayMessage(wire);assert(decoded.kind==2&&std::abs(decoded.effectiveBeat-(9+64./24000))<1e-9);
+  const NSUInteger beforeEcho=attempts.count;confirmation.head.eventSampleTime=AUEventSampleTimeImmediate;deliveryInput=&confirmation;deliveryTick();deliveryInput=nullptr;assert(attempts.count==beforeEcho);
+  [deliveryUnit deallocateRenderResources];
   [@"PASS: 12 native UIKit renders, ACTIVE/SELECTED, grid colors, AUv3 MIDI anti-echo and Pitch Bend tempo on simulated host\n" writeToFile:[directory stringByAppendingPathComponent:@"DONE.txt"] atomically:YES encoding:NSUTF8StringEncoding error:&error];
   assert(!error);[unit deallocateRenderResources];
  } @catch(NSException *exception){

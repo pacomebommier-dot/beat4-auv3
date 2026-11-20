@@ -313,6 +313,8 @@ static UIColor *circuitColor(NSInteger index){
     _modeControl.selectedSegmentTintColor=RGB(190,234,178);
     [_modeControl setTitleTextAttributes:@{NSFontAttributeName:Mono(size),NSForegroundColorAttributeName:RGB(228,235,220)} forState:UIControlStateNormal];
     [_modeControl setTitleTextAttributes:@{NSForegroundColorAttributeName:RGB(19,27,18)} forState:UIControlStateSelected];
+    _modeControl.clipsToBounds=YES;
+    [_modeControl setNeedsLayout];[_modeControl layoutIfNeeded];
     [self refreshPage];
 }
 - (void)configureNoteMenu {
@@ -393,6 +395,7 @@ static UIColor *circuitColor(NSInteger index){
         [s[@"hasRender"] boolValue]?@"oui":@"non",[s[@"midiOut"] boolValue]?@"disponible":@"absente",s[@"transportStatus"],
         [s[@"pg"] intValue]+1,[s[@"selectedPC"] intValue]+1,[s[@"uncertain"] boolValue]?@"oui":@"non"];
     message=[message stringByAppendingFormat:@"\n\nRELAY · messages : %@\nTransitions : %@\nDernier statut : %@",s[@"relaySent"],s[@"relayTransitions"],s[@"relayStatus"]];
+    message=[message stringByAppendingFormat:@"\nÉchecs cumulés : %@\nRetours live demandés : %@\nAbandons de livraison : %@",s[@"relayFailures"],s[@"relayCanceled"],s[@"relayDropped"]];
     UIAlertController *alert=[UIAlertController alertControllerWithTitle:@"Diagnostic MIDI" message:message preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"Fermer" style:UIAlertActionStyleCancel handler:nil]];
     [self presentViewController:alert animated:YES completion:nil];
@@ -543,6 +546,7 @@ static UIColor *circuitColor(NSInteger index){
         for(int value=1;value<=(field==0?15:24);++value){
             UIAction *item=[UIAction actionWithTitle:[NSString stringWithFormat:@"%d",value] image:nil identifier:nil handler:^(__kindof UIAction *action){
                 (void)action;Beat4ViewController *vc=weakSelf;if(!vc)return;
+                if([vc.unit currentProgram]!=pc){[vc refreshSong];return;}
                 NSDictionary *current=[vc.unit relayForProgram:pc];
                 [vc.unit saveRelayEnabled:[current[@"enabled"] boolValue] bars:field==0?value:[current[@"bars"] integerValue] fade:field==1?value:[current[@"fade"] integerValue] program:pc];[vc refreshSong];
             }];
