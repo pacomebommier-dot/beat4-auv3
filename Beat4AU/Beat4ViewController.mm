@@ -392,6 +392,7 @@ static UIColor *circuitColor(NSInteger index){
         [s[@"transportValid"] boolValue]?([s[@"moving"] boolValue]?@"PLAY":@"arrêté"):@"inconnu",
         [s[@"hasRender"] boolValue]?@"oui":@"non",[s[@"midiOut"] boolValue]?@"disponible":@"absente",s[@"transportStatus"],
         [s[@"pg"] intValue]+1,[s[@"selectedPC"] intValue]+1,[s[@"uncertain"] boolValue]?@"oui":@"non"];
+    message=[message stringByAppendingFormat:@"\n\nRELAY · messages : %@\nTransitions : %@\nDernier statut : %@",s[@"relaySent"],s[@"relayTransitions"],s[@"relayStatus"]];
     UIAlertController *alert=[UIAlertController alertControllerWithTitle:@"Diagnostic MIDI" message:message preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"Fermer" style:UIAlertActionStyleCancel handler:nil]];
     [self presentViewController:alert animated:YES completion:nil];

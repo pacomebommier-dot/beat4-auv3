@@ -41,6 +41,7 @@ struct State {
     std::array<std::atomic<int>,128> queues, cycleSteps, rampBars;
     std::array<std::atomic<uint32_t>,128> relaySettings{};
     beat4::RelayClock relayClock;
+    std::atomic<uint64_t> relaySent{0},relayTransitions{0};std::atomic<int> relayStatus{0};
     uint32_t relayLastSettings=~uint32_t(0);bool relayLastMoving=false,relayLastValid=false;double relayLastBeat=-1e20,relayLastOrigin=-1e20;
     std::atomic<int> draftRamp{0};
     std::atomic<int> draftSteps{16}, localPC{-1}, selectedPC{-1}, transportRequest{-1};
@@ -338,6 +339,7 @@ Snapshot load(const State& s) noexcept {
         auto sendRelay=[&](const beat4::RelayPacket& packet){
             if(!midiOut)return false;const auto message=beat4::relayMessage(packet);
             const auto status=midiOut(sampleTime,2,message.length,message.bytes.data());
+            s->relayStatus.store(status);if(status==noErr){s->relaySent.fetch_add(1);if(packet.kind==2)s->relayTransitions.fetch_add(1);}
             if(status!=noErr)s->journal.write(6,packet.program,4,beat);
             else s->journal.write(packet.kind==2?21:20,packet.program,packet.previous,packet.effectiveBeat);
             return status==noErr;
@@ -579,6 +581,7 @@ Snapshot load(const State& s) noexcept {
              @"bpm":@(s.bpm),@"bar":@(d.bar),@"numerator":@(s.numerator),
              @"denominator":@(s.denominator),@"pg":@(s.pg),
              @"kickEnabled":@(_state->kickEnabled.load()),@"kickLevel":@(_state->kickLevel.load()),
+             @"relaySent":@(_state->relaySent.load()),@"relayTransitions":@(_state->relayTransitions.load()),@"relayStatus":@(_state->relayStatus.load()),
              @"midiOut":@(_state->midiOutputConfigured.load()),
              @"selectedPC":@(s.selected),@"uncertain":@(s.uncertain),@"estimated":@(s.estimated),
              @"cycleSteps":@(s.cycleSteps),@"displayBeat":@(projected),
