@@ -129,7 +129,8 @@ static UIColor *circuitColor(NSInteger index){
 @property(nonatomic,strong)UISegmentedControl *modeControl;
 @property(nonatomic,strong)UIButton *setButton,*setEditButton,*rampToggle,*rampDuration,*relayToggle,*relayDuration,*relayFadeLabel,*relayFade;
 @property(nonatomic,strong)UILabel *hostBPM;
-@property(nonatomic,assign)NSInteger shownRampProgram,shownRampBars;
+@property(nonatomic,assign)NSInteger shownRampProgram,shownRampBars,shownRelayProgram;
+@property(nonatomic,assign)uint32_t shownRelayWord;
 @property(nonatomic,strong)NSMutableArray<UIButton*> *setPads;
 @property(nonatomic,assign)BOOL setEditing;
 @property(nonatomic,assign)NSInteger setEditPosition;
@@ -248,7 +249,7 @@ static UIColor *circuitColor(NSInteger index){
     _rampDuration.backgroundColor=RGB(190,234,178);_rampDuration.accessibilityLabel=@"Durée RAMPE";
     [_rampDuration setTitleColor:RGB(19,27,18) forState:UIControlStateNormal];
     _rampDuration.showsMenuAsPrimaryAction=YES;
-    self.shownRampProgram=-2;self.shownRampBars=-2;
+    self.shownRampProgram=-2;self.shownRampBars=-2;self.shownRelayProgram=-2;self.shownRelayWord=~uint32_t(0);
     _saveButton=[self makeButton:@"SAVE" size:10];
     [_saveButton setTitleColor:RGB(190,234,178) forState:UIControlStateNormal];
     [_saveButton addTarget:self action:@selector(saveRamp:) forControlEvents:UIControlEventTouchUpInside];
@@ -532,6 +533,9 @@ static UIColor *circuitColor(NSInteger index){
     }
     [_relayDuration setTitle:[settings[@"bars"] stringValue] forState:UIControlStateNormal];
     [_relayFade setTitle:[settings[@"fade"] stringValue] forState:UIControlStateNormal];
+    const uint32_t word=beat4::packRelaySettings({bool(on),(int)[settings[@"bars"] integerValue],(int)[settings[@"fade"] integerValue]});
+    if(self.shownRelayProgram==pc&&self.shownRelayWord==word)return;
+    self.shownRelayProgram=pc;self.shownRelayWord=word;
     __weak Beat4ViewController *weakSelf=self;
     for(int field=0;field<2;++field){
         NSMutableArray<UIMenuElement*> *items=[NSMutableArray new];
