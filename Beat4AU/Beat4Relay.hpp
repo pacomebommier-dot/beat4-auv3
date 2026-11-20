@@ -59,4 +59,5 @@ struct RelayClock {
   auto p=snapshot(outgoing,h);p.kind=2;p.previous=active;p.program=next;p.effectiveBeat=boundary;
   start(next,boundary,h.valid&&h.moving);return p;
  }
+};
 }
