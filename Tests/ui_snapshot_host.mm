@@ -62,9 +62,9 @@
   assert([unit relayForProgram:7][@"enabled"]&&[[unit relayForProgram:7][@"bars"] intValue]==5);
   assert([[unit rampForProgram:7][@"temporary"] boolValue]);
   assert(![unit songForProgram:7][@"rampBars"]||[[unit songForProgram:7][@"rampBars"] intValue]!=3);
-  auto relayState=unit.fullStateForDocument;Beat4AudioUnit *restored=[[Beat4AudioUnit alloc]initWithComponentDescription:desc options:0 error:&error];
-  assert(restored&&!error);restored.fullStateForDocument=relayState;
-  assert([[restored relayForProgram:7][@"bars"] intValue]==5&&[[restored relayForProgram:7][@"fade"] intValue]==2);
+  auto relayState=unit.fullStateForDocument;Beat4AudioUnit *relayRestored=[[Beat4AudioUnit alloc]initWithComponentDescription:desc options:0 error:&error];
+  assert(relayRestored&&!error);relayRestored.fullStateForDocument=relayState;
+  assert([[relayRestored relayForProgram:7][@"bars"] intValue]==5&&[[relayRestored relayForProgram:7][@"fade"] intValue]==2);
   [unit saveRelayEnabled:NO bars:5 fade:2 program:7];
   assert(![[unit relayForProgram:7][@"enabled"] boolValue]&&[[unit relayForProgram:7][@"fade"] intValue]==2);
   // STOP + PCH loads the next song without emitting a RELAY transition.
@@ -244,13 +244,6 @@
   [unit saveSongBPM:148 program:11];
   moving=YES;beat=33;tick();[unit selectProgram:11];tick();
   assert(unit.currentProgram==10 && [unit.transportSnapshot[@"selectedPC"] intValue]==11);
-  // STOP + PCH loads the next song without emitting a RELAY transition.
-  const NSUInteger stoppedRelayCount=relayMessages.count;
-  [unit selectProgram:6];tick();[unit selectProgram:7];tick();
-  for(NSUInteger n=stoppedRelayCount;n<relayMessages.count;++n)assert([relayMessages[n][@"bytes"][6] intValue]==1);
-  assert([unit.transportSnapshot[@"relayTransitions"] intValue]==0);
-  // Existing assertions concern only the unchanged legacy outputs.
-  [messages removeObjectsInRange:NSMakeRange(1,messages.count-1)];
   [unit setCycleSteps:32];[unit saveCurrentCycle];
   assert([[unit songForProgram:10][@"steps"] intValue]==32);
   assert(![unit songForProgram:11][@"steps"] || [[unit songForProgram:11][@"steps"] intValue]==16);
