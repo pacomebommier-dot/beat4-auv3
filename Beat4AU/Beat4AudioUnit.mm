@@ -81,7 +81,7 @@ struct State {
     beat4::ProgramMemory memories;
     double lastTempoSent=0;
     std::atomic<bool> midiOutputConfigured{false};
-    State() {for(int i=0;i<128;++i){notes[i].store(-1);tempos[i].store(0);queues[i].store(0);cycleSteps[i].store(16);rampBars[i].store(-1);}}
+    State() {for(int i=0;i<128;++i){notes[i].store(-1);tempos[i].store(0);queues[i].store(0);cycleSteps[i].store(16);rampBars[i].store(-1);relaySettings[i].store(0);}}
 };
 // Stable, realtime-readable callback slots. Host callbacks are installed during
 // allocateRenderResources, which can occur after internalRenderBlock is queried.
