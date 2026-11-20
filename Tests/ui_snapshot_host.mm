@@ -69,7 +69,10 @@
   assert(![[unit relayForProgram:7][@"enabled"] boolValue]&&[[unit relayForProgram:7][@"fade"] intValue]==2);
   // STOP + PCH loads the next song without emitting a RELAY transition.
   const NSUInteger stoppedRelayCount=relayMessages.count;
-  [unit selectProgram:6];tick();[unit selectProgram:7];tick();
+  [unit selectProgram:6];tick();
+  [unit saveRelayEnabled:YES bars:12 fade:9 program:7];
+  assert(![[unit relayForProgram:7][@"enabled"] boolValue]&&[[unit relayForProgram:7][@"bars"] intValue]==5&&[[unit relayForProgram:7][@"fade"] intValue]==2);
+  [unit selectProgram:7];tick();
   for(NSUInteger n=stoppedRelayCount;n<relayMessages.count;++n)assert([relayMessages[n][@"bytes"][6] intValue]==1);
   assert([unit.transportSnapshot[@"relayTransitions"] intValue]==0);
   // Existing assertions concern only the unchanged legacy outputs.
@@ -94,6 +97,7 @@
     [relayToggle sendActionsForControlEvents:UIControlEventTouchUpInside];[vc updateDisplay:nil];assert(relayFade.enabled);
     [relayToggle sendActionsForControlEvents:UIControlEventTouchUpInside];[vc updateDisplay:nil];assert(!relayFade.enabled);
     assert(CGRectGetMaxX(relayFade.frame)<=size.width+0.1&&CGRectGetMaxY(relayFade.frame)<=size.height);
+    assert([[vc valueForKey:@"modeControl"] clipsToBounds]);
     UISlider *slider=[vc valueForKey:@"levelSlider"];
     CGFloat trackCenter=CGRectGetMidY(slider.frame);
     auto capCenter=[](UIView *v,UIFont *font){
