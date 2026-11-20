@@ -12,11 +12,21 @@
     label.numberOfLines = 0;
     label.textAlignment = NSTextAlignmentCenter;
     label.text = @"BEAT//4\n\nAUv3 INSTRUMENT\n\nOpen AUM > Audio Channel\n> Audio Unit Instrument > BEAT//4\n\nCircuit Tracks PC on MIDI channel 16.\nAUM Control output → AUM MIDI Control.\nCircuit Projects output → Circuit Tracks.\nThis display runs inside AUM.";
-    [controller.view addSubview:label];
+    UIImageView *logo = [[UIImageView alloc] initWithImage:[UIImage imageNamed:@"BEAT4Logo"]];
+    logo.translatesAutoresizingMaskIntoConstraints = NO;
+    logo.contentMode = UIViewContentModeScaleAspectFit;
+    logo.isAccessibilityElement = YES;
+    logo.accessibilityLabel = @"BEAT quatre temps";
+    UIStackView *content = [[UIStackView alloc] initWithArrangedSubviews:@[logo, label]];
+    content.translatesAutoresizingMaskIntoConstraints = NO;
+    content.axis = UILayoutConstraintAxisVertical;
+    content.alignment = UIStackViewAlignmentCenter;
+    content.spacing = 16;
+    [controller.view addSubview:content];
     [NSLayoutConstraint activateConstraints:@[
-        [label.centerXAnchor constraintEqualToAnchor:controller.view.centerXAnchor],
-        [label.centerYAnchor constraintEqualToAnchor:controller.view.centerYAnchor],
-        [label.widthAnchor constraintLessThanOrEqualToAnchor:controller.view.widthAnchor multiplier:.9]
+        [content.centerXAnchor constraintEqualToAnchor:controller.view.centerXAnchor],
+        [content.centerYAnchor constraintEqualToAnchor:controller.view.centerYAnchor],
+        [content.widthAnchor constraintLessThanOrEqualToAnchor:controller.view.widthAnchor multiplier:.9], [logo.widthAnchor constraintEqualToConstant:96], [logo.heightAnchor constraintEqualToConstant:96]
     ]];
     self.window.rootViewController = controller;
     [self.window makeKeyAndVisible];

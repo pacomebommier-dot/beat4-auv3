@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <title>BEAT//4 — quatre temps</title>
+  <rect width="1024" height="1024" fill="#070908"/>
+  <g fill="#DBDFD1">
+    <rect x="220" y="256" width="104" height="512"/>
+    <rect x="380" y="256" width="104" height="512"/>
+    <rect x="540" y="256" width="104" height="512"/>
+  </g>
+  <rect x="700" y="256" width="104" height="512" fill="#B7DAA9"/>
+</svg>
