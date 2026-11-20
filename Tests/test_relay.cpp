@@ -2,6 +2,7 @@
 #include <cassert>
 #include <cmath>
 #include <cstdio>
+#include "../Beat4AU/Beat4RelayLayout.hpp"
 int main(){
  using namespace beat4;
  for(int bars=1;bars<=15;++bars)for(int fade=1;fade<=24;++fade){
@@ -25,5 +26,11 @@ int main(){
  h.moving=false;clock.observe(h);assert(!clock.phaseKnown);
  h.moving=true;h.beat=8;h.barStart=8;clock.observe(h);assert(clock.phaseKnown&&clock.origin==8);
  h.beat=2;h.barStart=0;clock.observe(h);assert(clock.origin==0);
+ for(int width=320;width<=1600;++width)for(double height:{375.,600.,768.,1024.}){
+  const auto layout=relayLayoutFor(width,height);const auto row=relayControlsFor(width,height);
+  assert(layout.song.w>0&&layout.song.x+layout.song.w<layout.setToggle.x);
+  assert(row.fade.x+row.fade.w<=width-width*.045+.1&&row.fade.y+row.fade.h<=height);
+ }
+ h.moving=false;a=engine.request(2,true,false,h,m);assert(a.newCycle&&a.activated==2&&!h.moving);
  puts("RELAY settings, QUEUE boundary, echo suppression, transport and MIDI roundtrip PASS");
 }

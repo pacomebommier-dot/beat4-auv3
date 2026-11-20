@@ -24,6 +24,13 @@ int main(){@autoreleasepool{
  NSDictionary *cleared=@{@"slots":@[@(-1),@(-1),@3,@(-1),@(-1),@(-1),@(-1),@(-1)],@"on":@YES,@"cursor":@1,@"restart":@NO};
  e=nil;NSData *clearedData=beat4::configurationData(merged,cleared,&e);assert(clearedData&&!e);
  auto clearedRoundTrip=beat4::parseConfigurationData(clearedData,&e);assert([clearedRoundTrip[@"set"][@"cursor"] intValue]==1);
+ auto relay=parse(@{@"format":@"BEAT4_CONFIG",@"version":@1,@"songs":@[@{@"song":@1,@"relayEnabled":@YES,@"relayBars":@15,@"relayFadeBars":@24}]});
+ auto withRelay=beat4::mergeSongPatches(merged,relay[@"songs"]);
+ e=nil;auto relayData=beat4::configurationData(withRelay,nil,&e);assert(relayData&&!e);
+ auto relayBack=beat4::parseConfigurationData(relayData,&e);assert([relayBack[@"songs"][@"0"][@"relayBars"] intValue]==15);
+ assert([relayBack[@"songs"][@"0"][@"relayFadeBars"] intValue]==24&&[relayBack[@"songs"][@"0"][@"relayEnabled"] boolValue]);
+ for(id invalid in @[@0,@16,@1.5,@YES]){e=nil;assert(!beat4::parseConfigurationData(json(@{@"format":@"BEAT4_CONFIG",@"version":@1,@"songs":@[@{@"song":@1,@"relayBars":invalid}]}),&e)&&e);}
+ e=nil;assert(!beat4::parseConfigurationData(json(@{@"format":@"BEAT4_CONFIG",@"version":@1,@"songs":@[@{@"song":@1,@"relayFadeBars":@25}]}),&e)&&e);
  NSArray *bad=@[
   @{@"songs":@[]},
   @{@"format":@"BEAT4_CONFIG",@"version":@2,@"songs":@[]},

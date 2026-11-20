@@ -247,6 +247,8 @@
 			sourceTree = SDKROOT;
 		};
         B4B400000000000000000100 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Branding/Assets.xcassets; sourceTree = "<group>"; };
+        B4B400000000000000000200 /* Beat4Relay.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = Beat4Relay.hpp; sourceTree = "<group>"; };
+        B4B400000000000000000201 /* Beat4RelayLayout.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = Beat4RelayLayout.hpp; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -309,6 +311,8 @@
 				B4B400000000000000000001,
 				B4B400000000000000000004,
 				B4B400000000000000000005,
+                B4B400000000000000000200,
+                B4B400000000000000000201,
 				D816B7768C2B38CCF59FFBAC,
 			);
 			path = Beat4AU;

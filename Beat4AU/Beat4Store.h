@@ -1,6 +1,7 @@
 #pragma once
 #import <Foundation/Foundation.h>
 #include "Beat4Songs.hpp"
+#include "Beat4Relay.hpp"
 namespace beat4 {
 inline double storedNumber(id value,double fallback=0){
  return [value isKindOfClass:NSNumber.class]?[(NSNumber*)value doubleValue]:fallback;
@@ -20,6 +21,11 @@ inline bool songRampEnabled(NSDictionary *song){
  return namedSong(song)&&songRampBars(song)>=0&&(song[@"rampEnabled"]?[song[@"rampEnabled"] boolValue]:!maskSong(song));
 }
 inline int songTempoRamp(NSDictionary *song){return songRampEnabled(song)?songRampBars(song):-1;}
+inline RelaySettings songRelaySettings(NSDictionary *song){
+ return {namedSong(song)&&[song[@"relayEnabled"] boolValue],
+  std::clamp((int)storedNumber(song[@"relayBars"],1),1,15),
+  std::clamp((int)storedNumber(song[@"relayFadeBars"],1),1,24)};
+}
 inline NSMutableDictionary *loadSongStore(NSUserDefaults *defaults){
  NSDictionary *saved=[defaults dictionaryForKey:@"beat4.songs.v2"];
  if(!saved)saved=[defaults dictionaryForKey:@"beat4.songs.v1"];
@@ -38,6 +44,7 @@ inline NSMutableDictionary *loadSongStore(NSUserDefaults *defaults){
     @"pcMode":@(storedMode((int)storedNumber(entry[@"pcMode"],-1)))} mutableCopy];
   for(NSString *field in @[@"rampBars",@"rampEnabled"])if([entry[field] isKindOfClass:NSNumber.class])song[field]=entry[field];
   if([entry[@"padColor"] isKindOfClass:NSString.class])song[@"padColor"]=entry[@"padColor"];
+  auto relay=songRelaySettings(entry);song[@"relayEnabled"]=@(relay.enabled);song[@"relayBars"]=@(relay.bars);song[@"relayFadeBars"]=@(relay.fade);
   result[key]=song;
  }];return result;
 }

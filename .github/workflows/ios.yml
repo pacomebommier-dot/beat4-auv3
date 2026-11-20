@@ -59,14 +59,14 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/Payload"
           cp -a "$RUNNER_TEMP/Beat4DerivedData/Build/Products/Release-iphoneos/BEAT4.app" "$RUNNER_TEMP/Payload/"
-          (cd "$RUNNER_TEMP" && zip -qry "$GITHUB_WORKSPACE/001_V0.5.24_BEAT_IPA.ipa" Payload)
-          python3 Tools/verify_ipa.py 001_V0.5.24_BEAT_IPA.ipa --version 0.5.24 --build 24
-          python3 Tools/verify_icon_package.py 001_V0.5.24_BEAT_IPA.ipa --version 0.5.24 --build 24
-          shasum -a 256 001_V0.5.24_BEAT_IPA.ipa > BEAT4_R10_IPA_SHA256.txt
+          (cd "$RUNNER_TEMP" && zip -qry "$GITHUB_WORKSPACE/001_V0.5.25_BEAT_IPA.ipa" Payload)
+          python3 Tools/verify_ipa.py 001_V0.5.25_BEAT_IPA.ipa --version 0.5.25 --build 25
+          python3 Tools/verify_icon_package.py 001_V0.5.25_BEAT_IPA.ipa --version 0.5.25 --build 25
+          shasum -a 256 001_V0.5.25_BEAT_IPA.ipa > BEAT4_R10_IPA_SHA256.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: BEAT4-V0-5-24-UNSIGNED-IPA
+          name: BEAT4-V0-5-25-UNSIGNED-IPA
           path: |
-            001_V0.5.24_BEAT_IPA.ipa
+            001_V0.5.25_BEAT_IPA.ipa
             BEAT4_R10_IPA_SHA256.txt
           if-no-files-found: error

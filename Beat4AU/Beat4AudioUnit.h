@@ -34,6 +34,8 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)previewRamp:(NSInteger)bars enabled:(BOOL)enabled program:(NSInteger)pc apply:(BOOL)apply;
 - (void)saveRampForProgram:(NSInteger)pc;
 - (void)savePadColor:(NSString *)color program:(NSInteger)pc;
+- (NSDictionary *)relayForProgram:(NSInteger)pc;
+- (void)saveRelayEnabled:(BOOL)enabled bars:(NSInteger)bars fade:(NSInteger)fade program:(NSInteger)pc;
 - (void)saveQueue:(NSInteger)beats program:(NSInteger)pc;
 @end
 NS_ASSUME_NONNULL_END

@@ -12,7 +12,7 @@ struct ProgramMemory {
 };
 // beat and barStart use AU musical-context quarter-note units.
 struct HostPosition { bool valid=false, moving=false; double beat=0, barStart=0, barLength=4, bpm=0; };
-struct ProgramAction { int activated=-1; bool sendPC=false; double tempo=0; };
+struct ProgramAction { int activated=-1; bool sendPC=false; double tempo=0; double activationBeat=0; bool newCycle=false; };
 inline bool shouldEmitTempo(ProgramAction a,double last) noexcept {
  const int value=tempoPitchBend14(a.tempo);
  return value>=0 && (a.activated>=0 || value!=tempoPitchBend14(last));
@@ -71,7 +71,7 @@ public:
   }
   if(selected>=0&&!uncertain&&h.beat>=due){
    const double boundary=due;
-   auto a=activate(selected,pendingLocal,h,m);cycleOrigin=boundary;cycleKnown=true;estimated=true;return a;
+   auto a=activate(selected,pendingLocal,h,m);a.activationBeat=boundary;cycleOrigin=boundary;cycleKnown=true;estimated=true;return a;
   }
   return {-1,false,tempoAt(h.beat)};
  }
@@ -124,7 +124,7 @@ private:
  ProgramAction activate(int pc,bool local,const HostPosition& h,const ProgramMemory& m) noexcept {
   const bool changed=active!=pc;
   active=pc;selected=-1;uncertain=false;estimated=local;
-  ProgramAction a{pc,local,valid(h)?beginTempo(h,m.bpm[pc],m.rampBars[pc]):0};
+  ProgramAction a{pc,local,valid(h)?beginTempo(h,m.bpm[pc],m.rampBars[pc]):0,h.beat,true};
   if(!valid(h)){ramp=false;haveBeat=false;cycleKnown=false;wasMoving=false;return a;}
   if(!h.moving){ramp=false;cycleKnown=false;wasMoving=false;}
   else if(changed||!cycleKnown){cycleOrigin=h.beat;cycleKnown=true;wasMoving=true;}

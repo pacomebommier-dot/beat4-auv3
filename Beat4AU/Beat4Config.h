@@ -34,7 +34,7 @@ inline NSDictionary *parseConfigurationData(NSData *data,NSError **error){
   for(id item in d[@"songs"]){
    if(![item isKindOfClass:NSDictionary.class])return configError(error,@"Entrée SONG invalide.");
    NSDictionary *row=item;
-   if(!configKeys(row,@[@"song",@"name",@"bpm",@"sub",@"steps",@"queue",@"pcMode",@"rampBars",@"rampEnabled",@"padColor"])||!configNumber(row[@"song"],1,64)||row.count<2)return configError(error,@"SONG attendu : numéro 1–64 et au moins un champ reconnu.");
+   if(!configKeys(row,@[@"song",@"name",@"bpm",@"sub",@"steps",@"queue",@"pcMode",@"rampBars",@"rampEnabled",@"padColor",@"relayEnabled",@"relayBars",@"relayFadeBars"])||!configNumber(row[@"song"],1,64)||row.count<2)return configError(error,@"SONG attendu : numéro 1–64 et au moins un champ reconnu.");
    NSString *key=[NSString stringWithFormat:@"%d",[row[@"song"] intValue]-1];
    if(patches[key])return configError(error,@"Un numéro SONG apparaît plusieurs fois.");
    NSMutableDictionary *p=[NSMutableDictionary new];
@@ -51,6 +51,9 @@ inline NSDictionary *parseConfigurationData(NSData *data,NSError **error){
    if(row[@"pcMode"]){if(!configNumber(row[@"pcMode"],-1,2))return configError(error,@"Mode historique invalide.");p[@"pcMode"]=row[@"pcMode"];}
    if(row[@"rampBars"]){if(row[@"rampBars"]!=NSNull.null&&!configNumber(row[@"rampBars"],0,20))return configError(error,@"Durée RAMPE invalide.");p[@"rampBars"]=row[@"rampBars"]==NSNull.null?@(-1):row[@"rampBars"];}
    if(row[@"rampEnabled"]){if(!configBool(row[@"rampEnabled"]))return configError(error,@"État RAMPE invalide.");p[@"rampEnabled"]=row[@"rampEnabled"];}
+   if(row[@"relayEnabled"]){if(!configBool(row[@"relayEnabled"]))return configError(error,@"État RELAY invalide.");p[@"relayEnabled"]=row[@"relayEnabled"];}
+   if(row[@"relayBars"]){if(!configNumber(row[@"relayBars"],1,15))return configError(error,@"RELAY : 1 à 15 BAR entières.");p[@"relayBars"]=row[@"relayBars"];}
+   if(row[@"relayFadeBars"]){if(!configNumber(row[@"relayFadeBars"],1,24))return configError(error,@"FONDU : 1 à 24 BAR entières.");p[@"relayFadeBars"]=row[@"relayFadeBars"];}
    if(row[@"padColor"]){if(row[@"padColor"]!=NSNull.null&&![rampPaletteNames() containsObject:row[@"padColor"]])return configError(error,@"Couleur PCh invalide.");p[@"padColor"]=row[@"padColor"]==NSNull.null?@"":row[@"padColor"];}
    patches[key]=p;
   }
@@ -82,7 +85,7 @@ inline NSData *configurationData(NSDictionary *songs,NSDictionary *set,NSError *
  if(songs){NSMutableArray *rows=[NSMutableArray new];
   for(int pc=0;pc<64;++pc){NSDictionary *s=songs[[NSString stringWithFormat:@"%d",pc]];if(!s)continue;
    NSMutableDictionary *r=[@{@"song":@(pc+1),@"name":s[@"title"]?:@"UNKNOWN",@"bpm":s[@"bpm"]?:@0,@"sub":[NSString stringWithUTF8String:noteName(s[@"sub"]?[s[@"sub"] intValue]:-1)]} mutableCopy];
-   for(NSString *k in @[@"steps",@"queue",@"pcMode",@"rampBars",@"rampEnabled",@"padColor"])if(s[k])r[k]=s[k];
+   for(NSString *k in @[@"steps",@"queue",@"pcMode",@"rampBars",@"rampEnabled",@"padColor",@"relayEnabled",@"relayBars",@"relayFadeBars"])if(s[k])r[k]=s[k];
    if(s[@"rampBars"]&&[s[@"rampBars"] intValue]<0)r[@"rampBars"]=NSNull.null;
    if(s[@"padColor"]&&[s[@"padColor"] length]==0)r[@"padColor"]=NSNull.null;
    [rows addObject:r];

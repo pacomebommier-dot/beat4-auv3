@@ -1,3 +1,4 @@
+#include "Beat4RelayLayout.hpp"
 #import "Beat4ViewController.h"
 #import "Beat4AudioUnit.h"
 #import <UIKit/UIKit.h>
@@ -126,7 +127,7 @@ static UIColor *circuitColor(NSInteger index){
 @property(nonatomic,strong)UIButton *kickButton,*noteButton,*songButton,*bpmButton;
 @property(nonatomic,strong)UIButton *playButton,*queueButton,*saveButton;
 @property(nonatomic,strong)UISegmentedControl *modeControl;
-@property(nonatomic,strong)UIButton *setButton,*setEditButton,*rampToggle,*rampDuration;
+@property(nonatomic,strong)UIButton *setButton,*setEditButton,*rampToggle,*rampDuration,*relayToggle,*relayDuration,*relayFadeLabel,*relayFade;
 @property(nonatomic,strong)UILabel *hostBPM;
 @property(nonatomic,assign)NSInteger shownRampProgram,shownRampBars;
 @property(nonatomic,strong)NSMutableArray<UIButton*> *setPads;
@@ -251,18 +252,25 @@ static UIColor *circuitColor(NSInteger index){
     _saveButton=[self makeButton:@"SAVE" size:10];
     [_saveButton setTitleColor:RGB(190,234,178) forState:UIControlStateNormal];
     [_saveButton addTarget:self action:@selector(saveRamp:) forControlEvents:UIControlEventTouchUpInside];
+    _relayToggle=[self makeButton:@"RELAY" size:12];
+    [_relayToggle addTarget:self action:@selector(toggleRelay:) forControlEvents:UIControlEventTouchUpInside];
+    _relayDuration=[self makeButton:@"1" size:12];_relayFadeLabel=[self makeButton:@"FONDU" size:12];_relayFadeLabel.userInteractionEnabled=NO;
+    _relayFade=[self makeButton:@"1" size:12];
+    _relayToggle.accessibilityLabel=@"RELAY ON/OFF pour le morceau sortant";
+    _relayDuration.accessibilityLabel=@"Boucle RELAY en BAR";_relayFade.accessibilityLabel=@"FONDU en BAR";
+    for(UIButton *button in @[_relayDuration,_relayFade]){button.contentHorizontalAlignment=UIControlContentHorizontalAlignmentCenter;button.showsMenuAsPrimaryAction=YES;}
     [self refreshSong];
 }
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
-    const auto l=beat4::layoutFor(self.view.bounds.size.width,self.view.bounds.size.height);
+    const auto l=beat4::relayLayoutFor(self.view.bounds.size.width,self.view.bounds.size.height);
     auto frame=[](beat4::Rect r){return CGRectMake(r.x,r.y,r.w,r.h);};
     _logo.frame=frame(l.logo);_logo.font=Mono(l.logoSize,UIFontWeightSemibold);
     _versionLabel.frame=frame(l.version);_versionLabel.font=Mono(l.versionSize);
     _host.frame=frame(l.viewTitle);
     for(int i=0;i<beat4::kSetCount;++i){_setPads[i].frame=frame(beat4::setPad(l,i));_setPads[i].titleLabel.font=Mono(MAX(6.,l.hostSize*.64));}
-    _setButton.frame=frame(l.setToggle);_setButton.titleLabel.font=Mono(MAX(9.,l.hostSize));
-    _setEditButton.frame=frame(l.setEditor);_setEditButton.titleLabel.font=Mono(MAX(11.,l.hostSize));_host.font=Mono(l.hostSize);_host.hidden=NO;
+    _setButton.frame=frame(l.setToggle);_setButton.titleLabel.font=Mono(MAX(12.,MIN(22.,self.view.bounds.size.width*.014)));
+    _setEditButton.frame=frame(l.setEditor);_setEditButton.titleLabel.font=Mono(MAX(12.,MIN(22.,self.view.bounds.size.width*.014)));_host.font=Mono(l.hostSize);_host.hidden=NO;
     _pgLabel.frame=frame(l.status);_pgLabel.font=Mono(l.transportsInHeader?12*l.scale:14*l.scale);
     self.canvas.lightBounds=frame(l.bars);[self.canvas setNeedsDisplay];
     _kickButton.frame=frame(l.kick);_kickButton.titleLabel.font=Mono(l.kickSize);
@@ -284,7 +292,7 @@ static UIColor *circuitColor(NSInteger index){
     _levelLabel.frame=alignText(_levelLabel.frame,_levelLabel.font,CGRectGetMidY(_levelSlider.frame));
     _bpmButton.frame=frame(l.bpm);_bpmButton.titleLabel.font=Mono(l.bpmSize,UIFontWeightMedium);
     _songButton.frame=frame(l.song);_songButton.titleLabel.font=Mono(l.songSize,UIFontWeightMedium);
-    _songButton.titleLabel.adjustsFontSizeToFitWidth=YES;_songButton.titleLabel.minimumScaleFactor=.5;
+    _songButton.titleLabel.adjustsFontSizeToFitWidth=YES;_songButton.titleLabel.minimumScaleFactor=MIN(1.,12./l.songSize);_songButton.titleLabel.lineBreakMode=NSLineBreakByTruncatingTail;
     _playButton.frame=frame(l.toggle);_playButton.titleLabel.font=Mono((l.portrait?24:28)*l.scale);
     _pageRegion.frame=frame(l.bars);
     for(int i=0;i<32;++i)_pads[i].frame=frame(beat4::programPad({0,0,l.bars.w,l.bars.h},i));
@@ -292,18 +300,17 @@ static UIColor *circuitColor(NSInteger index){
     _hostBPM.font=Mono(liveSize);_hostBPM.frame=CGRectMake(l.bpm.x,l.bpm.y-liveHeight,l.bpm.w,liveHeight);
     const CGFloat square=MAX(6,MIN(12,liveSize*.7));
     self.canvas.beatSquareBounds=CGRectMake(l.bpm.x,l.bpm.y-liveHeight-square-3,4*square+12,square);
-    const CGFloat size=MAX(8,MIN(l.modeSize,(self.view.bounds.size.width-2*l.modeLabel.x)/29)),
-        height=MAX(l.modeControl.h,l.save.h),y=l.modeControl.y;
-    CGFloat x=l.modeLabel.x;
-    _modeLabel.frame=CGRectMake(x,y,3.65*size,height);_modeLabel.font=Mono(size);x+=3.65*size;
-    _modeControl.frame=CGRectMake(x,y+(height-1.7*size)/2,11*size,1.7*size);x+=12.3*size;
-    _rampToggle.frame=CGRectMake(x,y,3.85*size,height);x+=3.85*size;
-    _rampDuration.frame=CGRectMake(x,y+(height-1.5*size)/2,2.7*size,1.5*size);x+=3.55*size;
-    _rampDuration.layer.cornerRadius=.75*size;
-    _saveButton.frame=CGRectMake(x,y,2.8*size,height);
-    for(UIButton *button in @[_rampToggle,_rampDuration,_saveButton])button.titleLabel.font=Mono(size);
+    const auto controls=beat4::relayControlsFor(self.view.bounds.size.width,self.view.bounds.size.height);
+    const CGFloat size=controls.font;
+    _modeLabel.frame=frame(controls.queue);_modeLabel.font=Mono(size);
+    _modeControl.frame=frame(controls.steps);_rampToggle.frame=frame(controls.ramp);
+    _rampDuration.frame=frame(controls.bars);_saveButton.frame=frame(controls.save);
+    _relayToggle.frame=frame(controls.relay);_relayDuration.frame=frame(controls.loop);
+    _relayFadeLabel.frame=frame(controls.fadeLabel);_relayFade.frame=frame(controls.fade);
+    for(UIButton *button in @[_rampToggle,_rampDuration,_saveButton,_relayToggle,_relayDuration,_relayFadeLabel,_relayFade])button.titleLabel.font=Mono(size);
+    for(UIButton *button in @[_rampDuration,_relayDuration,_relayFade])button.layer.cornerRadius=.75*size;
     _modeControl.selectedSegmentTintColor=RGB(190,234,178);
-    [_modeControl setTitleTextAttributes:@{NSFontAttributeName:Mono(MAX(9.,l.modeSize)),NSForegroundColorAttributeName:RGB(228,235,220)} forState:UIControlStateNormal];
+    [_modeControl setTitleTextAttributes:@{NSFontAttributeName:Mono(size),NSForegroundColorAttributeName:RGB(228,235,220)} forState:UIControlStateNormal];
     [_modeControl setTitleTextAttributes:@{NSForegroundColorAttributeName:RGB(19,27,18)} forState:UIControlStateSelected];
     [self refreshPage];
 }
@@ -408,7 +415,7 @@ static UIColor *circuitColor(NSInteger index){
     const int steps=[song[@"steps"] intValue]==32?32:16;
     _modeControl.selectedSegmentIndex=steps==32?1:0;
     _modeControl.enabled=pg>=0;
-    [self refreshRamp:pg song:song];
+    [self refreshRamp:pg song:song];[self refreshRelay:pg song:song];
     _pgLabel.text=[NSString stringWithFormat:@"%@%@",active,pending];
     BOOL configured=pg>=0;
     _noteButton.enabled=configured;_bpmButton.enabled=configured;
@@ -511,6 +518,37 @@ static UIColor *circuitColor(NSInteger index){
         [actions addObject:item];
     }
     _rampDuration.menu=[UIMenu menuWithTitle:@"RAMPE · Mesures" children:actions];
+}
+- (void)refreshRelay:(NSInteger)pc song:(NSDictionary *)song {
+    const BOOL named=pc>=0&&beat4::namedSong(song);
+    NSDictionary *settings=[self.unit relayForProgram:pc];const BOOL on=named&&[settings[@"enabled"] boolValue];
+    _relayToggle.enabled=named;_relayDuration.enabled=named;_relayFade.enabled=on;
+    [_relayToggle setTitleColor:on?UIColor.whiteColor:RGB(137,145,138) forState:UIControlStateNormal];
+    [_relayToggle setTitleColor:RGB(137,145,138) forState:UIControlStateDisabled];
+    [_relayFadeLabel setTitleColor:on?RGB(219,223,209):RGB(137,145,138) forState:UIControlStateNormal];
+    for(UIButton *button in @[_relayDuration,_relayFade]){
+        button.backgroundColor=button.enabled?RGB(190,234,178):RGB(21,23,24);
+        [button setTitleColor:RGB(19,27,18) forState:UIControlStateNormal];[button setTitleColor:RGB(137,145,138) forState:UIControlStateDisabled];
+    }
+    [_relayDuration setTitle:[settings[@"bars"] stringValue] forState:UIControlStateNormal];
+    [_relayFade setTitle:[settings[@"fade"] stringValue] forState:UIControlStateNormal];
+    __weak Beat4ViewController *weakSelf=self;
+    for(int field=0;field<2;++field){
+        NSMutableArray<UIMenuElement*> *items=[NSMutableArray new];
+        for(int value=1;value<=(field==0?15:24);++value){
+            UIAction *item=[UIAction actionWithTitle:[NSString stringWithFormat:@"%d",value] image:nil identifier:nil handler:^(__kindof UIAction *action){
+                (void)action;Beat4ViewController *vc=weakSelf;if(!vc)return;
+                NSDictionary *current=[vc.unit relayForProgram:pc];
+                [vc.unit saveRelayEnabled:[current[@"enabled"] boolValue] bars:field==0?value:[current[@"bars"] integerValue] fade:field==1?value:[current[@"fade"] integerValue] program:pc];[vc refreshSong];
+            }];
+            item.state=value==[settings[field==0?@"bars":@"fade"] intValue]?UIMenuElementStateOn:UIMenuElementStateOff;[items addObject:item];
+        }
+        (field==0?_relayDuration:_relayFade).menu=[UIMenu menuWithTitle:field==0?@"RELAY · BAR":@"FONDU · BAR" children:items];
+    }
+}
+- (void)toggleRelay:(id)sender {
+    (void)sender;NSInteger pc=[self.unit currentProgram];NSDictionary *s=[self.unit relayForProgram:pc];
+    [self.unit saveRelayEnabled:![s[@"enabled"] boolValue] bars:[s[@"bars"] integerValue] fade:[s[@"fade"] integerValue] program:pc];[self refreshSong];
 }
 - (void)toggleRamp:(id)sender {
     (void)sender;NSInteger pc=[self.unit currentProgram];NSDictionary *ramp=[self.unit rampForProgram:pc];

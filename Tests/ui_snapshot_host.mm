@@ -34,10 +34,10 @@
    if(flags)*flags=moving?AUHostTransportStateMoving:(AUHostTransportStateFlags)0;
    if(sample)*sample=beat*48000*60/128;if(start)*start=0;if(end)*end=0;return YES;
   };
-  NSMutableArray *messages=[NSMutableArray new];
+  NSMutableArray *messages=[NSMutableArray new],*relayMessages=[NSMutableArray new];
   unit.MIDIOutputEventBlock=^OSStatus(AUEventSampleTime time,uint8_t cable,NSInteger length,const uint8_t *bytes){
    NSMutableArray *data=[NSMutableArray new];for(NSInteger i=0;i<length;++i)[data addObject:@(bytes[i])];
-   [messages addObject:@{@"sample":@(time),@"cable":@(cable),@"bytes":data}];
+   [(cable==2?relayMessages:messages) addObject:@{@"sample":@(time),@"cable":@(cable),@"bytes":data}];
    return noErr;
   };
   assert([unit allocateRenderResourcesAndReturnError:&error] && !error);
@@ -57,6 +57,22 @@
   assert([[[unit songForProgram:6] objectForKey:@"bpm"] doubleValue]==117);
   assert([[[unit songForProgram:7] objectForKey:@"bpm"] doubleValue]==0);
   [unit saveSongTitle:@"R10 NATIVE TEST"];[unit saveSongBPM:135];[unit saveSongSubNote:5];
+  [unit previewRamp:3 enabled:YES program:7 apply:NO];
+  [unit saveRelayEnabled:YES bars:5 fade:2 program:7];
+  assert([unit relayForProgram:7][@"enabled"]&&[[unit relayForProgram:7][@"bars"] intValue]==5);
+  assert([[unit rampForProgram:7][@"temporary"] boolValue]);
+  assert(![unit songForProgram:7][@"rampBars"]||[[unit songForProgram:7][@"rampBars"] intValue]!=3);
+  auto relayState=unit.fullStateForDocument;Beat4AudioUnit *restored=[[Beat4AudioUnit alloc]initWithComponentDescription:desc options:0 error:&error];
+  assert(restored&&!error);restored.fullStateForDocument=relayState;
+  assert([[restored relayForProgram:7][@"bars"] intValue]==5&&[[restored relayForProgram:7][@"fade"] intValue]==2);
+  [unit saveRelayEnabled:NO bars:5 fade:2 program:7];
+  assert(![[unit relayForProgram:7][@"enabled"] boolValue]&&[[unit relayForProgram:7][@"fade"] intValue]==2);
+  // STOP + PCH loads the next song without emitting a RELAY transition.
+  const NSUInteger stoppedRelayCount=relayMessages.count;
+  [unit selectProgram:6];tick();[unit selectProgram:7];tick();
+  for(NSUInteger n=stoppedRelayCount;n<relayMessages.count;++n)assert([relayMessages[n][@"bytes"][6] intValue]==1);
+  // Existing assertions concern only the unchanged legacy outputs.
+  [messages removeObjectsInRange:NSMakeRange(1,messages.count-1)];
   [unit setCycleSteps:32];[unit saveCurrentCycle];
   moving=YES;beat=1;tick();[unit selectProgram:39];tick();
   assert([unit.transportSnapshot[@"selectedPC"] intValue]==39 && messages.count==1);
@@ -72,6 +88,11 @@
     vc.view.frame=CGRectMake(0,0,size.width,size.height);
     [vc.view setNeedsLayout];[vc.view layoutIfNeeded];
     [vc updateDisplay:nil];
+    UIButton *relayToggle=[vc valueForKey:@"relayToggle"],*relayFade=[vc valueForKey:@"relayFade"],*relayDuration=[vc valueForKey:@"relayDuration"];
+    assert(!relayFade.enabled&&[relayDuration.currentTitle isEqual:@"5"]);
+    [relayToggle sendActionsForControlEvents:UIControlEventTouchUpInside];[vc updateDisplay:nil];assert(relayFade.enabled);
+    [relayToggle sendActionsForControlEvents:UIControlEventTouchUpInside];[vc updateDisplay:nil];assert(!relayFade.enabled);
+    assert(CGRectGetMaxX(relayFade.frame)<=size.width+0.1&&CGRectGetMaxY(relayFade.frame)<=size.height);
     UISlider *slider=[vc valueForKey:@"levelSlider"];
     CGFloat trackCenter=CGRectGetMidY(slider.frame);
     auto capCenter=[](UIView *v,UIFont *font){
@@ -222,6 +243,12 @@
   [unit saveSongBPM:148 program:11];
   moving=YES;beat=33;tick();[unit selectProgram:11];tick();
   assert(unit.currentProgram==10 && [unit.transportSnapshot[@"selectedPC"] intValue]==11);
+  // STOP + PCH loads the next song without emitting a RELAY transition.
+  const NSUInteger stoppedRelayCount=relayMessages.count;
+  [unit selectProgram:6];tick();[unit selectProgram:7];tick();
+  for(NSUInteger n=stoppedRelayCount;n<relayMessages.count;++n)assert([relayMessages[n][@"bytes"][6] intValue]==1);
+  // Existing assertions concern only the unchanged legacy outputs.
+  [messages removeObjectsInRange:NSMakeRange(1,messages.count-1)];
   [unit setCycleSteps:32];[unit saveCurrentCycle];
   assert([[unit songForProgram:10][@"steps"] intValue]==32);
   assert(![unit songForProgram:11][@"steps"] || [[unit songForProgram:11][@"steps"] intValue]==16);
