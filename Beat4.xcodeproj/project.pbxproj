@@ -74,6 +74,8 @@
 		};
         B4B400000000000000000101 /* Brand assets in app Resources */ = {isa = PBXBuildFile; fileRef = B4B400000000000000000100; };
         B4B400000000000000000102 /* Brand assets in AU Resources */ = {isa = PBXBuildFile; fileRef = B4B400000000000000000100; };
+        B4B400000000000000000104 /* BEAT4PrimaryIcon.png in app Resources */ = {isa = PBXBuildFile; fileRef = B4B400000000000000000103; };
+        B4B400000000000000000105 /* BEAT4PrimaryIcon.png in AU Resources */ = {isa = PBXBuildFile; fileRef = B4B400000000000000000103; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -249,6 +251,7 @@
         B4B400000000000000000100 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Branding/Assets.xcassets; sourceTree = "<group>"; };
         B4B400000000000000000200 /* Beat4Relay.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = Beat4Relay.hpp; sourceTree = "<group>"; };
         B4B400000000000000000201 /* Beat4RelayLayout.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = Beat4RelayLayout.hpp; sourceTree = "<group>"; };
+        B4B400000000000000000103 /* BEAT4PrimaryIcon.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = Branding/BEAT4PrimaryIcon.png; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -280,6 +283,7 @@
 			isa = PBXGroup;
 			children = (
 				B4B400000000000000000100,
+                B4B400000000000000000103,
 				03EF5F83940F99F90C8894A0,
 				EB1E7D89A079D64C1608E63A,
 				1BCCF40C0BB5C9ABDEDFD19A,
@@ -431,6 +435,7 @@
 			buildActionMask = 2147483647;
 			files = (
                 B4B400000000000000000101,
+                B4B400000000000000000104,
             );
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -439,6 +444,7 @@
 			buildActionMask = 2147483647;
 			files = (
                 B4B400000000000000000102,
+                B4B400000000000000000105,
             );
 			runOnlyForDeploymentPostprocessing = 0;
 		};

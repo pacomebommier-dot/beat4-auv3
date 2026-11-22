@@ -9,6 +9,12 @@ def verify_icons(package):
     with zipfile.ZipFile(package) as archive:
         for prefix in ('Payload/BEAT4.app', 'Payload/BEAT4.app/PlugIns/Beat4AU.appex'):
             info = plistlib.loads(archive.read(prefix + '/Info.plist'))
+            if info['CFBundleShortVersionString'] == '0.5.27':
+                fallback = 'BEAT4PrimaryIcon.png'
+                if info.get('CFBundleIconFile') != fallback or fallback not in info.get('CFBundleIconFiles', []):
+                    raise ValueError(f'{prefix}: missing standalone icon declarations')
+                if not archive.read(prefix + '/' + fallback).startswith(b'\x89PNG\r\n\x1a\n'):
+                    raise ValueError(f'{prefix}: missing or invalid standalone icon')
             for key in ('CFBundleIcons', 'CFBundleIcons~ipad'):
                 primary = info.get(key, {}).get('CFBundlePrimaryIcon', {})
                 if primary.get('CFBundleIconName') != 'AppIcon':

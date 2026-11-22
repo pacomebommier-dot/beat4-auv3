@@ -2,6 +2,12 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>CFBundleIconFile</key>
+	<string>BEAT4PrimaryIcon.png</string>
+	<key>CFBundleIconFiles</key>
+	<array>
+		<string>BEAT4PrimaryIcon.png</string>
+	</array>
 	<key>CFBundleDisplayName</key>
 	<string>BEAT//4 AUv3</string>
 	<key>CFBundleExecutable</key>
@@ -15,9 +21,9 @@
 	<key>CFBundlePackageType</key>
 	<string>XPC!</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.5.26</string>
+	<string>0.5.27</string>
 	<key>CFBundleVersion</key>
-	<string>26</string>
+	<string>27</string>
 	<key>NSExtension</key>
 	<dict>
 		<key>NSExtensionAttributes</key>
