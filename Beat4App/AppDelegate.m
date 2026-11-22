@@ -1,4 +1,5 @@
 #import "AppDelegate.h"
+#import <AudioToolbox/AudioToolbox.h>
 @implementation AppDelegate
 - (BOOL)application:(UIApplication *)app didFinishLaunchingWithOptions:(NSDictionary *)opts {
     (void)app; (void)opts;
@@ -17,7 +18,32 @@
     logo.contentMode = UIViewContentModeScaleAspectFit;
     logo.isAccessibilityElement = YES;
     logo.accessibilityLabel = @"BEAT quatre temps";
-    UIStackView *content = [[UIStackView alloc] initWithArrangedSubviews:@[logo, label]];
+    AudioComponentDescription description = {
+        .componentType = kAudioUnitType_MusicDevice,
+        .componentSubType = 'bt04',
+        .componentManufacturer = 'B4MT',
+    };
+    AudioComponent component = AudioComponentFindNext(NULL, &description);
+    UIImage *componentIcon = component ? AudioComponentCopyIcon(component) : nil;
+    UIImageView *systemLogo = [[UIImageView alloc] initWithImage:componentIcon];
+    systemLogo.contentMode = UIViewContentModeScaleAspectFit;
+    systemLogo.isAccessibilityElement = YES;
+    systemLogo.accessibilityLabel = @"Icône AUv3 fournie par iPadOS";
+    [NSLayoutConstraint activateConstraints:@[
+        [systemLogo.widthAnchor constraintEqualToConstant:72],
+        [systemLogo.heightAnchor constraintEqualToConstant:72]
+    ]];
+    UIStackView *icons = [[UIStackView alloc] initWithArrangedSubviews:@[logo, systemLogo]];
+    icons.alignment = UIStackViewAlignmentCenter;
+    icons.spacing = 24;
+    if (!component) {
+        label.text = @"Diagnostic du logo BEAT//4\n\niPadOS ne trouve pas le composant AUv3.";
+    } else if (!componentIcon) {
+        label.text = @"Diagnostic du logo BEAT//4\n\nLe composant AUv3 est présent.\niPadOS ne fournit aucune icône.";
+    } else {
+        label.text = @"Diagnostic du logo BEAT//4\n\nÀ gauche : logo du projet.\nÀ droite : icône AUv3 fournie par iPadOS.";
+    }
+    UIStackView *content = [[UIStackView alloc] initWithArrangedSubviews:@[icons, label]];
     content.translatesAutoresizingMaskIntoConstraints = NO;
     content.axis = UILayoutConstraintAxisVertical;
     content.alignment = UIStackViewAlignmentCenter;
