@@ -35,10 +35,10 @@
    if(flags)*flags=moving?AUHostTransportStateMoving:(AUHostTransportStateFlags)0;
    if(sample)*sample=beat*48000*60/128;if(start)*start=0;if(end)*end=0;return YES;
   };
-  NSMutableArray *messages=[NSMutableArray new],*relayMessages=[NSMutableArray new];
+  NSMutableArray *messages=[NSMutableArray new],*relayMessages=[NSMutableArray new],*ledMessages=[NSMutableArray new];
   unit.MIDIOutputEventBlock=^OSStatus(AUEventSampleTime time,uint8_t cable,NSInteger length,const uint8_t *bytes){
    NSMutableArray *data=[NSMutableArray new];for(NSInteger i=0;i<length;++i)[data addObject:@(bytes[i])];
-   [(cable==2?relayMessages:messages) addObject:@{@"sample":@(time),@"cable":@(cable),@"bytes":data}];
+   [(cable==3?ledMessages:cable==2?relayMessages:messages) addObject:@{@"sample":@(time),@"cable":@(cable),@"bytes":data}];
    return noErr;
   };
   assert([unit allocateRenderResourcesAndReturnError:&error] && !error);
