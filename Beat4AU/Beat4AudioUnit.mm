@@ -11,6 +11,7 @@
 #import "Beat4Transport.hpp"
 #import "Beat4Songs.hpp"
 #import "Beat4Program.hpp"
+#import "Beat4PresetTimeline.hpp"
 #import "Beat4Set.hpp"
 #import "Beat4Journal.hpp"
 #import "Beat4Store.h"
@@ -62,6 +63,9 @@ struct State {
     int xoneRedShown=-2;
     int presetActiveSent=-2, presetQueuedSent=-2;
     double presetStateSentAt=-1;
+    beat4::PresetTimeline presetTimeline;
+    int presetProgressSent=-2;
+    double presetProgressSentAt=-1;
     double gestureClock=0;
     bool enqueue(int kind,int index=0,int value=0) noexcept {
         std::lock_guard<std::mutex> guard(producerMutex);
@@ -258,6 +262,9 @@ Snapshot load(const State& s) noexcept {
     _state->presetActiveSent=-2;
     _state->presetQueuedSent=-2;
     _state->presetStateSentAt=-1;
+    _state->presetTimeline.reset();
+    _state->presetProgressSent=-2;
+    _state->presetProgressSentAt=-1;
     _state->transportPulse=beat4::TransportPulse{};_state->lastTempoSent=0;
     _state->callbacks.store(0);_state->tick.store(0);_state->selectedPC.store(-1);
     _state->uncertain.store(false);_state->localStop.store(0);
@@ -345,12 +352,20 @@ Snapshot load(const State& s) noexcept {
         };
         loadRampDraft();
         s->relayClock.observe(position);
+        auto presetEnd=[&](double boundary, const beat4::RelaySettings& settings, bool phaseKnown){
+            return boundary+(position.valid&&moving&&phaseKnown&&settings.enabled ? settings.fade*position.barLength : 0.);
+        };
         auto sendRelay=[&](const beat4::RelayPacket& packet){
             if(!midiOut){s->relayStatus.store(kAudioUnitErr_CannotDoInCurrentContext);s->relayFailures.fetch_add(1);return false;}const auto message=beat4::relayMessage(packet);
             const auto status=midiOut(sampleTime,2,message.length,message.bytes.data());
             s->relayStatus.store(status);if(status==noErr){s->relaySent.fetch_add(1);if(packet.kind==2)s->relayTransitions.fetch_add(1);}
             if(status!=noErr){s->relayFailures.fetch_add(1);s->journal.write(6,packet.program,4,beat);}
-            else s->journal.write(packet.kind==2?21:packet.kind==3?22:20,packet.program,packet.previous,packet.effectiveBeat);
+            else {
+                s->journal.write(packet.kind==2?21:packet.kind==3?22:20,packet.program,packet.previous,packet.effectiveBeat);
+                if(packet.kind==2 || packet.kind==3)
+                    s->presetTimeline.activate(packet.program,packet.effectiveBeat,
+                        presetEnd(packet.effectiveBeat,packet.settings,packet.phaseKnown));
+            }
             return status==noErr;
         };
         int previousActive=s->engine.active;
@@ -368,7 +383,10 @@ Snapshot load(const State& s) noexcept {
                 if(outgoing>=0&&position.valid&&position.moving){
                     const auto settings=beat4::unpackRelaySettings(s->relaySettings[outgoing].load());
                     s->relayDelivery.offer(s->relayClock.transition(a.activated,a.activationBeat,settings,position));
-                }else s->relayClock.start(a.activated,a.activationBeat,position.valid&&position.moving);
+                }else {
+                    s->relayClock.start(a.activated,a.activationBeat,position.valid&&position.moving);
+                    s->presetTimeline.activate(a.activated,a.activationBeat,a.activationBeat);
+                }
             }
             if(a.activated>=0){
                 if(previousActive>=0&&previousActive!=a.activated){
@@ -503,6 +521,14 @@ Snapshot load(const State& s) noexcept {
         s->gestureClock+=sampleRate>0?frameCount/sampleRate:0;
         const int presetActive=s->engine.active;
         const int presetQueued=s->engine.selected;
+        if(presetQueued>=0 && position.valid && moving && !s->engine.uncertain){
+            const double boundary=s->engine.queuedBoundary();
+            const auto settings=beat4::unpackRelaySettings(presetActive>=0?s->relaySettings[presetActive].load():0);
+            s->presetTimeline.queue(presetQueued,beat,presetEnd(boundary,settings,s->relayClock.phaseKnown));
+        }else if(!s->relayDelivery.pending()){
+            s->presetTimeline.cancelQueue();
+        }
+
         if(midiOut && (presetActive!=s->presetActiveSent || presetQueued!=s->presetQueuedSent ||
                        s->gestureClock-s->presetStateSentAt>=1)){
             // Private cable 4 carries both PCH indices atomically. 127 means absent.
@@ -514,6 +540,19 @@ Snapshot load(const State& s) noexcept {
                 s->presetStateSentAt=s->gestureClock;
             }
         }
+        const int progress=s->presetTimeline.progress(beat);
+        const bool immediate=progress<=0 || progress==16382;
+        if(midiOut && presetActive==s->presetActiveSent && presetQueued==s->presetQueuedSent &&
+           (progress!=s->presetProgressSent || s->presetProgressSentAt<s->presetStateSentAt) &&
+           (immediate || s->gestureClock-s->presetProgressSentAt>=.01)){
+            const unsigned encoded=progress<0?16383u:static_cast<unsigned>(progress);
+            const uint8_t timing[3]={0xE0, static_cast<uint8_t>(encoded&127), static_cast<uint8_t>(encoded>>7)};
+            if(midiOut(sampleTime,4,3,timing)==noErr){
+                s->presetProgressSent=progress;
+                s->presetProgressSentAt=s->gestureClock;
+            }
+        }
+
 
 
         if(s->engine.selected!=s->selectedPC.load() || s->engine.uncertain!=s->uncertain.load())

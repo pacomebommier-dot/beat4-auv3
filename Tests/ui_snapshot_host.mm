@@ -38,6 +38,7 @@
   NSMutableArray *messages=[NSMutableArray new],*relayMessages=[NSMutableArray new],*ledMessages=[NSMutableArray new],*songStates=[NSMutableArray new];
   unit.MIDIOutputEventBlock=^OSStatus(AUEventSampleTime time,uint8_t cable,NSInteger length,const uint8_t *bytes){
    NSMutableArray *data=[NSMutableArray new];for(NSInteger i=0;i<length;++i)[data addObject:@(bytes[i])];
+   if(cable==4 && bytes[0]!=0xEF)return noErr;
    [(cable==4?songStates:cable==3?ledMessages:cable==2?relayMessages:messages) addObject:@{@"sample":@(time),@"cable":@(cable),@"bytes":data}];
    return noErr;
   };

@@ -80,6 +80,7 @@ public:
   return {-1,false,beginTempo(h,m.bpm[active],bars)};
  }
  void stopTempo() noexcept {ramp=false;}
+ double queuedBoundary() const noexcept {return due;}
 private:
  bool pendingLocal=false,haveBeat=false,ramp=false,outputBlocked=false,cycleKnown=false,wasMoving=false;
  double cycleOrigin=0,due=0,lastBeat=0,rampStart=0,rampLength=0,startBPM=0,targetBPM=0;
