@@ -189,9 +189,11 @@
   AURenderEvent event{};event.head.eventType=AURenderEventMIDI;event.head.eventSampleTime=AUEventSampleTimeImmediate;
   event.MIDI.length=2;event.MIDI.data[0]=0xCF;event.MIDI.data[1]=103;input=&event;tick();
   assert(unit.currentProgram==7 && ![unit.transportSnapshot[@"uncertain"] boolValue] && messages.count==1);
+  assert([songStates.lastObject[@"bytes"] isEqual:(@[@239,@7,@39])]);
   input=nullptr;beat=3.99;tick();assert(unit.currentProgram==7);
   beat=4;tick();assert(unit.currentProgram==7 && messages.count==1);
   beat=8;tick();assert(unit.currentProgram==39 && messages.count==1);
+  assert([songStates.lastObject[@"bytes"] isEqual:(@[@239,@39,@127])]);
   input=&event;
   event.MIDI.data[1]=39;tick();assert(unit.currentProgram==39 && messages.count==1);input=nullptr;
   [unit requestTransportToggle];tick();tick();
