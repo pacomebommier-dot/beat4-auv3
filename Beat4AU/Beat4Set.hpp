@@ -20,6 +20,26 @@ struct PressRelease {
  }
  void cancel() noexcept {down=false;}
 };
+// Latch MAJ at RED press. Releasing MAJ first still consumes the RED release.
+struct XoneSetGesture {
+ PressRelease red;
+ bool majDown=false, setChord=false;
+ enum class Action { None, Short, Long, ToggleSet };
+ Action event(uint8_t note,bool pressed,double seconds) noexcept {
+  if(note==31){majDown=pressed;return Action::None;}
+  if(note!=12)return Action::None;
+  if(pressed&&!red.down)setChord=majDown;
+  const Gesture gesture=red.event(pressed,seconds);
+  if(gesture==Gesture::None)return Action::None;
+  const bool toggle=setChord;setChord=false;
+  if(toggle)return Action::ToggleSet;
+  return gesture==Gesture::Long?Action::Long:Action::Short;
+ }
+ void cancel() noexcept {red.cancel();majDown=false;setChord=false;}
+};
+inline int redLedNote(bool moving,bool setOn) noexcept {
+ return moving?(setOn?12:16):-1;
+}
 // Render-thread owner. No secondary queue: ProgramEngine.selected is authoritative.
 struct SetEngine {
  ProgramEngine program;
@@ -31,6 +51,7 @@ struct SetEngine {
  RequestOrigin beforeOrigin=RequestOrigin::None;
  int first() const noexcept {for(int i=0;i<kSetCount;++i)if(slots[i]>=0)return i;return -1;}
  int last() const noexcept {for(int i=kSetCount-1;i>=0;--i)if(slots[i]>=0)return i;return -1;}
+ void toggleFromXone() noexcept {on=!on&&first()>=0;}
  void assign(int index,int pc) noexcept {
   if(index<0||index>=kSetCount||pc< -1||pc>=64)return;
   slots[index]=pc;if(first()<0)on=false;

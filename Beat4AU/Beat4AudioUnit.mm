@@ -58,6 +58,8 @@ struct State {
     std::atomic<uint64_t> setPublished{0};
     std::atomic<int> setActive{-1},setQueued{-1},setReached{-1},setCursor{-1};
     beat4::PressRelease xone;
+    beat4::XoneSetGesture xoneSet;
+    int xoneRedShown=-2;
     double gestureClock=0;
     bool enqueue(int kind,int index=0,int value=0) noexcept {
         std::lock_guard<std::mutex> guard(producerMutex);
@@ -238,7 +240,7 @@ Snapshot load(const State& s) noexcept {
 - (AUParameterTree *)parameterTree {return _params;}
 - (AUAudioUnitBusArray *)inputBusses {return _inputs;}
 - (AUAudioUnitBusArray *)outputBusses {return _outputs;}
-- (NSArray<NSString *> *)MIDIOutputNames {return @[@"AUM Control", @"Circuit Projects", @"RELAY Control"];}
+- (NSArray<NSString *> *)MIDIOutputNames {return @[@"AUM Control", @"Circuit Projects", @"RELAY Control", @"XONE LED"];}
 - (NSInteger)virtualMIDICableCount {return 2;}
 - (BOOL)allocateRenderResourcesAndReturnError:(NSError * _Nullable __autoreleasing *)outError {
     if(![super allocateRenderResourcesAndReturnError:outError])return NO;
@@ -249,6 +251,8 @@ Snapshot load(const State& s) noexcept {
     _state->engine=beat4::ProgramEngine{};_state->engine.active=active;
     _state->set.queuedPosition=-1;_state->set.origin=beat4::RequestOrigin::None;
     _state->xone.cancel();
+    _state->xoneSet.cancel();
+    _state->xoneRedShown=-2;
     _state->transportPulse=beat4::TransportPulse{};_state->lastTempoSent=0;
     _state->callbacks.store(0);_state->tick.store(0);_state->selectedPC.store(-1);
     _state->uncertain.store(false);_state->localStop.store(0);
@@ -412,14 +416,23 @@ Snapshot load(const State& s) noexcept {
             }
             bool xonePressed=false;
             const bool xoneNote=e->MIDI.length==3 && beat4::xonePlayEvent(e->MIDI.data[0],e->MIDI.data[1],e->MIDI.data[2],xonePressed);
-            // Also accept the established BEAT4 CC control mapping. The XONE
-            // must arrive as raw note12, not Mozaic's old immediate toggle.
-            if(xoneNote || (e->MIDI.length==3 && e->MIDI.data[0]==0xBF && e->MIDI.data[1]==110)){
+            const bool majNote=e->MIDI.length==3 && e->MIDI.data[1]==31 &&
+                (e->MIDI.data[0]==0x9E || e->MIDI.data[0]==0x8E);
+            if(xoneNote || majNote || (e->MIDI.length==3 && e->MIDI.data[0]==0xBF && e->MIDI.data[1]==110)){
                 double eventClock=s->gestureClock;
                 if(validTime && e->head.eventSampleTime>=sampleTime)
                     eventClock+=(e->head.eventSampleTime-sampleTime)/sampleRate;
-                const auto gesture=s->xone.event(xoneNote?xonePressed:e->MIDI.data[2]>0,eventClock);
-                if(gesture!=beat4::Gesture::None)playGesture(gesture==beat4::Gesture::Long);
+                if(xoneNote || majNote){
+                    const bool pressed=xoneNote?xonePressed:(e->MIDI.data[0]==0x9E && e->MIDI.data[2]>0);
+                    const auto action=s->xoneSet.event(e->MIDI.data[1],pressed,eventClock);
+                    using XoneAction=beat4::XoneSetGesture::Action;
+                    if(action==XoneAction::ToggleSet)s->set.toggleFromXone();
+                    else if(action==XoneAction::Short || action==XoneAction::Long)
+                        playGesture(action==XoneAction::Long);
+                }else{
+                    const auto gesture=s->xone.event(e->MIDI.data[2]>0,eventClock);
+                    if(gesture!=beat4::Gesture::None)playGesture(gesture==beat4::Gesture::Long);
+                }
                 continue;
             }
             int raw=-1;
@@ -493,6 +506,20 @@ Snapshot load(const State& s) noexcept {
         const bool cursorChanged=s->set.cursor!=s->setCursor.exchange(s->set.cursor);
         if(packed!=s->setPublished.exchange(packed)||cursorChanged)s->revision.fetch_add(1);
         if(appliedConfiguration)s->appliedConfiguration.store(appliedConfiguration,std::memory_order_release);
+        if(midiOut && transportOK){
+            const int led=beat4::redLedNote(moving,s->set.on);
+            if(led!=s->xoneRedShown){
+                auto sendRedLed=[&](uint8_t status,uint8_t note){
+                    const uint8_t bytes[3]={status,note,static_cast<uint8_t>(status==0x9E?127:0)};
+                    return midiOut(sampleTime,3,3,bytes)==noErr;
+                };
+                const bool cleared=s->xoneRedShown==-2
+                    ? sendRedLed(0x8E,12)&&sendRedLed(0x8E,16)
+                    : s->xoneRedShown<0||sendRedLed(0x8E,static_cast<uint8_t>(s->xoneRedShown));
+                if(cleared&&(led<0||sendRedLed(0x9E,static_cast<uint8_t>(led))))
+                    s->xoneRedShown=led;
+            }
+        }
         if(midiOut){
             const auto message=s->transportPulse.next();
             if(message.length){
