@@ -35,10 +35,10 @@
    if(flags)*flags=moving?AUHostTransportStateMoving:(AUHostTransportStateFlags)0;
    if(sample)*sample=beat*48000*60/128;if(start)*start=0;if(end)*end=0;return YES;
   };
-  NSMutableArray *messages=[NSMutableArray new],*relayMessages=[NSMutableArray new],*ledMessages=[NSMutableArray new];
+  NSMutableArray *messages=[NSMutableArray new],*relayMessages=[NSMutableArray new],*ledMessages=[NSMutableArray new],*songStates=[NSMutableArray new];
   unit.MIDIOutputEventBlock=^OSStatus(AUEventSampleTime time,uint8_t cable,NSInteger length,const uint8_t *bytes){
    NSMutableArray *data=[NSMutableArray new];for(NSInteger i=0;i<length;++i)[data addObject:@(bytes[i])];
-   [(cable==3?ledMessages:cable==2?relayMessages:messages) addObject:@{@"sample":@(time),@"cable":@(cable),@"bytes":data}];
+   [(cable==4?songStates:cable==3?ledMessages:cable==2?relayMessages:messages) addObject:@{@"sample":@(time),@"cable":@(cable),@"bytes":data}];
    return noErr;
   };
   assert([unit allocateRenderResourcesAndReturnError:&error] && !error);
@@ -52,6 +52,7 @@
    assert(render(&flags,&stamp,128,0,&buffers,input,nil)==noErr);
   };
   [unit selectProgram:7];tick();assert(unit.currentProgram==7 && messages.count==1);
+  assert([songStates.lastObject[@"bytes"] isEqual:(@[@239,@7,@127])]);
   NSArray *expectedPC=@[@207,@7];
   assert([messages[0][@"cable"] intValue]==1 && [messages[0][@"bytes"] isEqual:expectedPC]);
   [unit saveSongBPM:117 program:6];

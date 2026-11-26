@@ -60,6 +60,8 @@ struct State {
     beat4::PressRelease xone;
     beat4::XoneSetGesture xoneSet;
     int xoneRedShown=-2;
+    int presetActiveSent=-2, presetQueuedSent=-2;
+    double presetStateSentAt=-1;
     double gestureClock=0;
     bool enqueue(int kind,int index=0,int value=0) noexcept {
         std::lock_guard<std::mutex> guard(producerMutex);
@@ -240,7 +242,7 @@ Snapshot load(const State& s) noexcept {
 - (AUParameterTree *)parameterTree {return _params;}
 - (AUAudioUnitBusArray *)inputBusses {return _inputs;}
 - (AUAudioUnitBusArray *)outputBusses {return _outputs;}
-- (NSArray<NSString *> *)MIDIOutputNames {return @[@"AUM Control", @"Circuit Projects", @"RELAY Control", @"XONE LED"];}
+- (NSArray<NSString *> *)MIDIOutputNames {return @[@"AUM Control", @"Circuit Projects", @"RELAY Control", @"XONE LED", @"Preset Song State"];}
 - (NSInteger)virtualMIDICableCount {return 2;}
 - (BOOL)allocateRenderResourcesAndReturnError:(NSError * _Nullable __autoreleasing *)outError {
     if(![super allocateRenderResourcesAndReturnError:outError])return NO;
@@ -253,6 +255,9 @@ Snapshot load(const State& s) noexcept {
     _state->xone.cancel();
     _state->xoneSet.cancel();
     _state->xoneRedShown=-2;
+    _state->presetActiveSent=-2;
+    _state->presetQueuedSent=-2;
+    _state->presetStateSentAt=-1;
     _state->transportPulse=beat4::TransportPulse{};_state->lastTempoSent=0;
     _state->callbacks.store(0);_state->tick.store(0);_state->selectedPC.store(-1);
     _state->uncertain.store(false);_state->localStop.store(0);
@@ -496,6 +501,20 @@ Snapshot load(const State& s) noexcept {
             }
         }
         s->gestureClock+=sampleRate>0?frameCount/sampleRate:0;
+        const int presetActive=s->engine.active;
+        const int presetQueued=s->engine.selected;
+        if(midiOut && (presetActive!=s->presetActiveSent || presetQueued!=s->presetQueuedSent ||
+                       s->gestureClock-s->presetStateSentAt>=1)){
+            // Private cable 4 carries both PCH indices atomically. 127 means absent.
+            const uint8_t songState[3]={0xEF, static_cast<uint8_t>(presetActive<0?127:presetActive),
+                                      static_cast<uint8_t>(presetQueued<0?127:presetQueued)};
+            if(midiOut(sampleTime,4,3,songState)==noErr){
+                s->presetActiveSent=presetActive;
+                s->presetQueuedSent=presetQueued;
+                s->presetStateSentAt=s->gestureClock;
+            }
+        }
+
 
         if(s->engine.selected!=s->selectedPC.load() || s->engine.uncertain!=s->uncertain.load())
             s->journal.write(s->engine.uncertain?5:7,s->engine.selected,local>=0?1:0,beat);
