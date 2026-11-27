@@ -64,9 +64,9 @@
   auto *incidentEvent=new (incidentBytes) AURenderEvent{};
   incidentEvent->MIDI.eventType=AURenderEventMIDI;
   incidentEvent->MIDI.length=9;
-  auto sendIncident=[&](uint8_t kind,int payload){
+  void (^sendIncident)(uint8_t,int)=^(uint8_t kind,int payload){
    const uint8_t bytes[]{0xF0,0x7D,66,52,1,kind,uint8_t(payload%128),uint8_t(payload/128),0xF7};
-   std::memcpy(incidentBytes+offsetof(AUMIDIEvent,data),bytes,sizeof(bytes));
+   std::memcpy(reinterpret_cast<uint8_t*>(incidentEvent)+offsetof(AUMIDIEvent,data),bytes,sizeof(bytes));
    input=incidentEvent;tick();input=nullptr;
   };
   const auto outputBeforeIncident=messages.count;
