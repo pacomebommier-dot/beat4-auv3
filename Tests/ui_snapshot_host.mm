@@ -1,3 +1,6 @@
+#include <new>
+#include <cstddef>
+#include <cstring>
 #import <UIKit/UIKit.h>
 #import <AVFoundation/AVFoundation.h>
 #import "../Beat4AU/Beat4ViewController.h"
@@ -56,6 +59,24 @@
   assert([songStates.lastObject[@"bytes"] isEqual:(@[@239,@7,@127])]);
   NSArray *expectedPC=@[@207,@7];
   assert([messages[0][@"cable"] intValue]==1 && [messages[0][@"bytes"] isEqual:expectedPC]);
+  // A routed Mozaic incident must reach the report without producing MIDI control.
+  alignas(AURenderEvent) uint8_t incidentBytes[sizeof(AURenderEvent)+9]{};
+  auto *incidentEvent=new (incidentBytes) AURenderEvent{};
+  incidentEvent->MIDI.eventType=AURenderEventMIDI;
+  incidentEvent->MIDI.length=9;
+  auto sendIncident=[&](uint8_t kind,int payload){
+   const uint8_t bytes[]{0xF0,0x7D,66,52,1,kind,uint8_t(payload%128),uint8_t(payload/128),0xF7};
+   std::memcpy(incidentBytes+offsetof(AUMIDIEvent,data),bytes,sizeof(bytes));
+   input=incidentEvent;tick();input=nullptr;
+  };
+  const auto outputBeforeIncident=messages.count;
+  sendIncident(5,1518);sendIncident(6,1);sendIncident(1,0);sendIncident(2,466);sendIncident(3,1);
+  assert(messages.count==outputBeforeIncident);
+  NSString *incidentReport=[unit captureIncident];
+  assert([incidentReport containsString:@"Session AUM V15.18"]);
+  assert([incidentReport containsString:@"PB WET 466 · commande fader"]);
+  assert([incidentReport containsString:@"rebond CC19"]);
+  assert([unit.savedIncidents.lastObject isEqualToString:incidentReport]);
   [unit saveSongBPM:117 program:6];
   assert([[[unit songForProgram:6] objectForKey:@"bpm"] doubleValue]==117);
   assert([[[unit songForProgram:7] objectForKey:@"bpm"] doubleValue]==0);
