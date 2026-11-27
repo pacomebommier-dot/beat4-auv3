@@ -470,8 +470,9 @@
 
   [vc performSelector:@selector(showConfigurationMenu:) withObject:nil];
   UIAlertController *menu=(UIAlertController*)vc.presentedViewController;
-  assert([menu isKindOfClass:UIAlertController.class]&&menu.actions.count==4);
+  assert([menu isKindOfClass:UIAlertController.class]&&menu.actions.count==5);
   assert([menu.actions[0].title containsString:@"Importer"]&&[menu.actions[1].title containsString:@"Exporter"]);
+  assert([menu.actions[2].title isEqualToString:@"Incidents enregistrés"]);
   [vc dismissViewControllerAnimated:NO completion:nil];
   for(NSDictionary *message in messages){
    NSArray *bytes=message[@"bytes"];
