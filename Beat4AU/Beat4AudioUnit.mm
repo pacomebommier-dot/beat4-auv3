@@ -739,25 +739,43 @@ Snapshot load(const State& s) noexcept {
     NSArray<NSString*> *sources=@[@"inconnue",@"fader",@"preset",@"morphing",@"retour MIX"];
     [report appendString:@"\nAlertes des 10 dernières secondes\n"];
     bool hasAlert=false;
+    double lastM2Alert=-1;
     for(const auto& r:alerts){
         if(r.beat<mark-10 || r.beat>mark)continue;
         hasAlert=true;
         if(r.event==beat4::MidiFailure)
             [report appendFormat:@"%+.0f ms · BEAT · échec MIDI (%@) · PC brut %d\n",1000*(r.beat-mark),
                 @[@"",@"projet Circuit",@"tempo",@"transport AUM",@"RELAY"][r.origin],r.pc];
-        else [report appendFormat:@"%+.0f ms · M2 · %@ · valeur brute %d\n",1000*(r.beat-mark),
-            r.event==beat4::InputRebound?@"rebond CC19":@"remontée PB WET",r.pc];
+        else {
+            lastM2Alert=r.beat;
+            [report appendFormat:@"%+.0f ms · M2 · %@ · valeur brute %d\n",1000*(r.beat-mark),
+                r.event==beat4::InputRebound?@"rebond CC19":@"remontée PB WET",r.pc];
+        }
     }
     if(!hasAlert)[report appendString:@"Aucune alerte reçue dans cette fenêtre.\n"];
-    [report appendString:@"\nTrace M2 des 5 dernières secondes\n"];
-    bool hasTrace=false;
+    [report appendString:@"\nTrace M2 autour du dernier signalement ou des dernières valeurs\n"];
+    const double traceEnd=lastM2Alert>=0?std::min(mark,lastM2Alert+.3):mark;
+    const double traceStart=lastM2Alert>=0?lastM2Alert-.7:mark-5;
+    std::vector<beat4::JournalRecord> excerpt;
     for(const auto& r:trace){
-        if(r.beat<mark-5 || r.beat>mark)continue;
-        hasTrace=true;
-        [report appendFormat:@"%+.0f ms · %@ %d · commande %@\n",1000*(r.beat-mark),
-            r.event==beat4::Fader4?@"CC19":@"PB WET",r.pc,sources[r.origin]];
+        if(r.beat>=traceStart && r.beat<=traceEnd)excerpt.push_back(r);
     }
-    if(!hasTrace)[report appendString:@"Aucun événement M2 reçu dans cette fenêtre.\n"];
+    if(excerpt.empty())[report appendString:@"Aucun événement M2 reçu dans cette fenêtre.\n"];
+    else {
+        // Preserve individual fader movements. Sample denser WET traffic first.
+        std::vector<size_t> indexes;
+        for(size_t i=0;i<excerpt.size();++i){
+            if(excerpt[i].event==beat4::Fader4 || excerpt.size()<=32 || i%4==0 || i+1==excerpt.size())
+                indexes.push_back(i);
+        }
+        const size_t lines=std::min<size_t>(32,indexes.size());
+        if(lines<excerpt.size())[report appendFormat:@"Extrait : %zu valeurs affichées sur %zu.\n",lines,excerpt.size()];
+        for(size_t n=0;n<lines;++n){
+            const auto& r=excerpt[indexes[lines<=1?0:n*(indexes.size()-1)/(lines-1)]];
+            [report appendFormat:@"%+.0f ms · %@ %d · commande %@\n",1000*(r.beat-mark),
+                r.event==beat4::Fader4?@"CC19":@"PB WET",r.pc,sources[r.origin]];
+        }
+    }
     NSUserDefaults *defaults=NSUserDefaults.standardUserDefaults;
     NSString *key=@"beat4.incidents.v1";
     @synchronized(defaults){
