@@ -14,6 +14,7 @@
 #import "Beat4PresetTimeline.hpp"
 #import "Beat4Set.hpp"
 #import "Beat4Journal.hpp"
+#import "Beat4Incidents.hpp"
 #import "Beat4Store.h"
 #import "Beat4Config.h"
 #include <mutex>
@@ -49,6 +50,11 @@ struct State {
     std::atomic<bool> uncertain{false},estimated{false};
     beat4::TransportPulse transportPulse;
     beat4::Journal journal;
+    beat4::IncidentHistory incidentTrace;
+    beat4::IncidentAlerts incidentAlerts;
+    std::atomic<double> incidentClock{0};
+    std::atomic<int> incidentSession{0};
+    int incidentMode=0;
     beat4::SetEngine set;
     beat4::ProgramEngine& engine=set.program; // render thread only
     struct Command {int kind=0,index=0,value=0;std::array<int,beat4::kSetCount> slots{};uint64_t serial=0;};
@@ -355,11 +361,15 @@ Snapshot load(const State& s) noexcept {
         auto presetEnd=[&](double boundary, const beat4::RelaySettings& settings, bool phaseKnown){
             return boundary+(position.valid&&moving&&phaseKnown&&settings.enabled ? settings.fade*position.barLength : 0.);
         };
+        auto midiFailure=[&](int program,int origin){
+            s->journal.write(6,program,origin,beat);
+            s->incidentAlerts.write(beat4::MidiFailure,program,origin,s->gestureClock);
+        };
         auto sendRelay=[&](const beat4::RelayPacket& packet){
             if(!midiOut){s->relayStatus.store(kAudioUnitErr_CannotDoInCurrentContext);s->relayFailures.fetch_add(1);return false;}const auto message=beat4::relayMessage(packet);
             const auto status=midiOut(sampleTime,2,message.length,message.bytes.data());
             s->relayStatus.store(status);if(status==noErr){s->relaySent.fetch_add(1);if(packet.kind==2)s->relayTransitions.fetch_add(1);}
-            if(status!=noErr){s->relayFailures.fetch_add(1);s->journal.write(6,packet.program,4,beat);}
+            if(status!=noErr){s->relayFailures.fetch_add(1);midiFailure(packet.program,4);}
             else {
                 s->journal.write(packet.kind==2?21:packet.kind==3?22:20,packet.program,packet.previous,packet.effectiveBeat);
                 if(packet.kind==2 || packet.kind==3)
@@ -371,11 +381,12 @@ Snapshot load(const State& s) noexcept {
         int previousActive=s->engine.active;
         auto apply=[&](beat4::ProgramAction a){
             if(a.sendPC){
-                if(!midiOut){s->journal.write(6,a.activated,1,beat);s->set.outputFailed(previousActive,a.activated);return false;}
+                if(!midiOut){midiFailure(a.activated,1);s->set.outputFailed(previousActive,a.activated);return false;}
                 // Immediate PC at our boundary, avoiding a second native Circuit queue.
                 auto message=beat4::circuitMessage(a.activated);
                 const auto status=midiOut(sampleTime,message.cable,message.length,message.bytes.data());
-                s->journal.write(status==noErr?4:6,a.activated,1,beat);
+                if(status==noErr)s->journal.write(4,a.activated,1,beat);
+                else midiFailure(a.activated,1);
                 if(status!=noErr){s->set.outputFailed(previousActive,a.activated);return false;}
             }
             if(a.activated>=0&&a.newCycle){
@@ -401,7 +412,7 @@ Snapshot load(const State& s) noexcept {
                 if(message.length){
                     const auto status=midiOut(sampleTime,message.cable,message.length,message.bytes.data());
                     if(status==noErr)s->lastTempoSent=a.tempo;
-                    else {s->journal.write(6,s->engine.active,2,beat);return false;}
+                    else {midiFailure(s->engine.active,2);return false;}
                 }
             }
             if(!midiOut && beat4::shouldEmitTempo(a,s->lastTempoSent))return false;
@@ -424,6 +435,19 @@ Snapshot load(const State& s) noexcept {
                 continue;
             }
             if(e->head.eventType!=AURenderEventMIDI || e->MIDI.length<1)continue;
+            beat4::IncidentMidi incident{};
+            if(beat4::decodeIncident(e->MIDI.data,e->MIDI.length,incident)){
+                switch(incident.kind){
+                    case beat4::SessionVersion:s->incidentSession.store(incident.value);break;
+                    case beat4::MixSource:s->incidentMode=incident.value;break;
+                    case beat4::InputRebound:case beat4::OutputRebound:
+                        s->incidentAlerts.write(incident.kind,incident.value,s->incidentMode,s->gestureClock);break;
+                    default:
+                        s->incidentTrace.write(incident.kind,incident.value,s->incidentMode,s->gestureClock);break;
+                }
+                continue;
+            }
+            if(e->MIDI.data[0]==0xF0)continue;
             s->journal.write(10,e->MIDI.data[0],e->MIDI.length>1?e->MIDI.data[1]:-1,e->MIDI.length>2?e->MIDI.data[2]:-1);
             // Realtime transport is one byte, without a MIDI channel. Never
             // forward clock or raw transport to Circuit Projects: AUM owns it.
@@ -459,7 +483,7 @@ Snapshot load(const State& s) noexcept {
                 continue;
             }
             int raw=-1;
-            if(beat4::isCircuitProgramChange(e->MIDI.data[0],e->MIDI.data[1],raw)){
+            if(e->MIDI.length>=2 && beat4::isCircuitProgramChange(e->MIDI.data[0],e->MIDI.data[1],raw)){
                 s->journal.write(1,raw,0,beat);
                 // In1 retains Circuit's existing confirmation protocol. In2 is
                 // for independent controllers requesting a quantized recall.
@@ -519,6 +543,7 @@ Snapshot load(const State& s) noexcept {
             }
         }
         s->gestureClock+=sampleRate>0?frameCount/sampleRate:0;
+        s->incidentClock.store(s->gestureClock);
         const int presetActive=s->engine.active;
         const int presetQueued=s->engine.selected;
         if(presetQueued>=0 && position.valid && moving && !s->engine.uncertain){
@@ -587,7 +612,7 @@ Snapshot load(const State& s) noexcept {
                     s->sentTransport.fetch_add(1);
                     s->journal.write(9,message.bytes[1],3,beat);
                 }
-                if(status!=noErr)s->journal.write(6,s->engine.active,3,beat);
+                if(status!=noErr)midiFailure(s->engine.active,3);
                 if(status==noErr && message.bytes[2]==127)s->localStop.store(message.bytes[1]==111);
             }
         }
@@ -684,6 +709,67 @@ Snapshot load(const State& s) noexcept {
              @"invalidTimestamps":@(_state->invalidTimestamps.load()),@"renderAge":@(age),@"renderSampleRate":@(_state->sampleRate.load()),
              @"transportCallback":@(_cachedTransport!=nil),@"musicalCallback":@(_cachedMusical!=nil),
              @"transportValid":@(s.transportValid),@"musicalValid":@(s.musicalValid)};
+}
+- (NSString*)captureIncident {
+    const double mark=_state->incidentClock.load();
+    NSDictionary *snapshot=[self transportSnapshot];
+    const auto trace=_state->incidentTrace.read();
+    const auto alerts=_state->incidentAlerts.read();
+    NSBundle *bundle=[NSBundle bundleForClass:self.class];
+    NSDateFormatter *date=[NSDateFormatter new];
+    date.dateFormat=@"yyyy-MM-dd HH:mm:ss.SSS ZZZZZ";
+    NSString *hostVersion=[NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"];
+    const int session=_state->incidentSession.load();
+    const int pg=[snapshot[@"pg"] intValue], queued=[snapshot[@"selectedPC"] intValue];
+    NSString *transport=![snapshot[@"transportValid"] boolValue]?@"inconnu":([snapshot[@"moving"] boolValue]?@"lecture":@"arrêt");
+    NSMutableString *report=[NSMutableString stringWithFormat:
+        @"BEAT4 — incident marqué manuellement\nDate et heure : %@\nBEAT %@ (build %@) · iOS %@\n",
+        [date stringFromDate:NSDate.date], [bundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"],
+        [bundle objectForInfoDictionaryKey:@"CFBundleVersion"],
+        NSProcessInfo.processInfo.operatingSystemVersionString];
+    if([NSBundle.mainBundle.bundleIdentifier.lowercaseString containsString:@"aum"] && hostVersion)
+        [report appendFormat:@"Hôte AUM %@\n",hostVersion];
+    if(session>0)[report appendFormat:@"Session AUM V%d.%02d · Mozaic M2 identifié\n",session/100,session%100];
+    else [report appendString:@"Session AUM et M2 : version non reçue\n"];
+    [report appendFormat:@"Transport : %@ · morceau : %@ · QUEUE : %@ · SET %@ · BPM %@ · temps %@\n",
+        transport,pg<0?@"aucun":[@(pg+1) stringValue],queued<0?@"vide":[@(queued+1) stringValue],
+        [[self setSnapshot][@"on"] boolValue]?@"ON":@"OFF",snapshot[@"bpm"],snapshot[@"displayBeat"]];
+    [report appendFormat:@"RELAY vu par BEAT : %@ transitions, %@ échecs MIDI, %@ abandons · version non reçue\n",
+        snapshot[@"relayTransitions"],snapshot[@"relayFailures"],snapshot[@"relayDropped"]];
+    NSArray<NSString*> *sources=@[@"inconnue",@"fader",@"preset",@"morphing",@"retour MIX"];
+    [report appendString:@"\nAlertes des 10 dernières secondes\n"];
+    bool hasAlert=false;
+    for(const auto& r:alerts){
+        if(r.beat<mark-10 || r.beat>mark)continue;
+        hasAlert=true;
+        if(r.event==beat4::MidiFailure)
+            [report appendFormat:@"%+.0f ms · BEAT · échec MIDI (%@) · PC brut %d\n",1000*(r.beat-mark),
+                @[@"",@"projet Circuit",@"tempo",@"transport AUM",@"RELAY"][r.origin],r.pc];
+        else [report appendFormat:@"%+.0f ms · M2 · %@ · valeur brute %d\n",1000*(r.beat-mark),
+            r.event==beat4::InputRebound?@"rebond CC19":@"remontée PB WET",r.pc];
+    }
+    if(!hasAlert)[report appendString:@"Aucune alerte reçue dans cette fenêtre.\n"];
+    [report appendString:@"\nTrace M2 des 5 dernières secondes\n"];
+    bool hasTrace=false;
+    for(const auto& r:trace){
+        if(r.beat<mark-5 || r.beat>mark)continue;
+        hasTrace=true;
+        [report appendFormat:@"%+.0f ms · %@ %d · commande %@\n",1000*(r.beat-mark),
+            r.event==beat4::Fader4?@"CC19":@"PB WET",r.pc,sources[r.origin]];
+    }
+    if(!hasTrace)[report appendString:@"Aucun événement M2 reçu dans cette fenêtre.\n"];
+    NSUserDefaults *defaults=NSUserDefaults.standardUserDefaults;
+    NSString *key=@"beat4.incidents.v1";
+    @synchronized(defaults){
+        NSMutableArray *saved=[[defaults stringArrayForKey:key] mutableCopy]?:[NSMutableArray new];
+        [saved addObject:[report copy]];
+        if(saved.count>20)[saved removeObjectsInRange:NSMakeRange(0,saved.count-20)];
+        [defaults setObject:saved forKey:key];
+    }
+    return [report copy];
+}
+- (NSArray<NSString*>*)savedIncidents {
+    return [NSUserDefaults.standardUserDefaults stringArrayForKey:@"beat4.incidents.v1"]?:@[];
 }
 - (NSArray*)diagnosticLog {
     NSMutableArray *result=[NSMutableArray new];

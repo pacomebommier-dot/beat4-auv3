@@ -125,7 +125,7 @@ static UIColor *circuitColor(NSInteger index){
 @property(nonatomic,copy)NSDictionary *frameSnapshot;
 @property(nonatomic,strong)UILabel *logo,*versionLabel,*host,*pgLabel,*subLabel,*levelLabel,*modeLabel,*pcModeLabel;
 @property(nonatomic,strong)UIButton *kickButton,*noteButton,*songButton,*bpmButton;
-@property(nonatomic,strong)UIButton *playButton,*queueButton,*saveButton;
+@property(nonatomic,strong)UIButton *playButton,*queueButton,*saveButton,*incidentButton;
 @property(nonatomic,strong)UISegmentedControl *modeControl;
 @property(nonatomic,strong)UIButton *setButton,*setEditButton,*rampToggle,*rampDuration,*relayToggle,*relayDuration,*relayFadeLabel,*relayFade;
 @property(nonatomic,strong)UILabel *hostBPM;
@@ -177,6 +177,10 @@ static UIColor *circuitColor(NSInteger index){
     _logo.accessibilityTraits=UIAccessibilityTraitButton;
     [_logo addGestureRecognizer:[[UITapGestureRecognizer alloc]initWithTarget:self action:@selector(showConfigurationMenu:)]];
     _versionLabel=[self makeLabel:[NSString stringWithFormat:@"v%@",[NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"0.5.23"] size:8 color:RGB(122,145,121)];
+    _incidentButton=[self makeButton:@"INCIDENT" size:10];
+    _incidentButton.contentHorizontalAlignment=UIControlContentHorizontalAlignmentCenter;
+    _incidentButton.accessibilityLabel=@"Copier un incident";
+    [_incidentButton addTarget:self action:@selector(copyIncident:) forControlEvents:UIControlEventTouchUpInside];
     _modeLabel=[self makeLabel:@"QUEUE" size:10 color:RGB(197,208,197)];
     _hostBPM=[self makeLabel:@"" size:12 color:RGB(145,148,145)];
     _host=[[Beat4TitleLabel alloc]init];_host.text=@"MÉTRONOME";
@@ -268,6 +272,10 @@ static UIColor *circuitColor(NSInteger index){
     auto frame=[](beat4::Rect r){return CGRectMake(r.x,r.y,r.w,r.h);};
     _logo.frame=frame(l.logo);_logo.font=Mono(l.logoSize,UIFontWeightSemibold);
     _versionLabel.frame=frame(l.version);_versionLabel.font=Mono(l.versionSize);
+    const CGFloat incidentX=CGRectGetMaxX(_versionLabel.frame)+4;
+    const CGFloat incidentEnd=l.portrait?self.view.bounds.size.width-l.logo.x:l.viewTitle.x-4;
+    _incidentButton.frame=CGRectMake(incidentX,MAX(0.,CGRectGetMidY(_versionLabel.frame)-16.),
+                                      MAX(0.,MIN(76.,incidentEnd-incidentX)),32);
     _host.frame=frame(l.viewTitle);
     for(int i=0;i<beat4::kSetCount;++i){_setPads[i].frame=frame(beat4::setPad(l,i));_setPads[i].titleLabel.font=Mono(MAX(6.,l.hostSize*.64));}
     _setButton.frame=frame(l.setToggle);_setButton.titleLabel.font=Mono(MAX(12.,MIN(22.,self.view.bounds.size.width*.014)));
@@ -351,6 +359,7 @@ static UIColor *circuitColor(NSInteger index){
         picker.delegate=weakSelf;picker.allowsMultipleSelection=NO;[weakSelf presentViewController:picker animated:YES completion:nil];
     }]];
     [menu addAction:[UIAlertAction actionWithTitle:@"Exporter SONGS / SET" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){(void)action;[weakSelf exportConfiguration];}]];
+    [menu addAction:[UIAlertAction actionWithTitle:@"Incidents enregistrés" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){(void)action;[weakSelf showSavedIncidents];}]];
     [menu addAction:[UIAlertAction actionWithTitle:@"Diagnostic MIDI" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){(void)action;[weakSelf showMIDIDiagnostic:nil];}]];
     [menu addAction:[UIAlertAction actionWithTitle:@"Annuler" style:UIAlertActionStyleCancel handler:nil]];
     menu.popoverPresentationController.sourceView=_logo;menu.popoverPresentationController.sourceRect=_logo.bounds;
@@ -390,6 +399,29 @@ static UIColor *circuitColor(NSInteger index){
         (void)activity;(void)completed;(void)items;(void)failure;[NSFileManager.defaultManager removeItemAtURL:directory error:nil];
     };
     [self presentViewController:share animated:YES completion:nil];
+}
+- (void)copyIncident:(id)sender {
+    NSString *report=[self.unit captureIncident];
+    if(!report)return;
+    UIPasteboard.generalPasteboard.string=report;
+    UIButton *button=sender;
+    [button setTitle:@"COPIÉ" forState:UIControlStateNormal];
+    UIAccessibilityPostNotification(UIAccessibilityAnnouncementNotification,@"Incident copié");
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,NSEC_PER_SEC*2),dispatch_get_main_queue(),^{
+        [button setTitle:@"INCIDENT" forState:UIControlStateNormal];
+    });
+}
+- (void)showSavedIncidents {
+    NSArray<NSString*> *reports=[self.unit savedIncidents];
+    UIAlertController *alert=[UIAlertController alertControllerWithTitle:@"Incidents enregistrés"
+        message:reports.count?@"Copier l’historique des incidents marqués.":@"Aucun incident enregistré."
+        preferredStyle:UIAlertControllerStyleAlert];
+    if(reports.count)[alert addAction:[UIAlertAction actionWithTitle:@"Tout copier" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){
+        (void)action;
+        UIPasteboard.generalPasteboard.string=[reports componentsJoinedByString:@"\n━━━━━━━━━━\n"];
+    }]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Fermer" style:UIAlertActionStyleCancel handler:nil]];
+    [self presentViewController:alert animated:YES completion:nil];
 }
 - (void)showMIDIDiagnostic:(id)sender {
     (void)sender;

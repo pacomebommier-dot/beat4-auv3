@@ -18,6 +18,8 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)setKickLevel:(float)level;
 - (void)setKickEnabled:(BOOL)enabled;
 - (NSArray *)diagnosticLog;
+- (NSString *)captureIncident;
+- (NSArray<NSString *> *)savedIncidents;
 - (void)requestTransportToggle;
 - (void)requestPlayGestureLong:(BOOL)isLong;
 - (NSDictionary *)setSnapshot;
